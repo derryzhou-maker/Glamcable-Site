@@ -1,0 +1,67 @@
+import { Product } from './types';
+
+// Fallback data used when data.json is missing or network fails.
+// We include a few sample products so the site doesn't look broken on fresh load.
+export const INITIAL_DATA = {
+  version: "1.0.0",
+  theme: {
+    heroImage: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=2000",
+    logoImage: null,
+    certImages: {},
+    factoryImages: [],
+    aboutCertsImage: null
+  },
+  products: [
+    {
+      id: "sample-us-cord-01",
+      sku: "US-NEMA-C13",
+      category: "Power Cords",
+      subCategory: "UL Standard",
+      nameEn: "US Standard 3-Pin Power Cord (NEMA 5-15P to C13)",
+      nameZh: "美标三插电源线 (NEMA 5-15P 转 C13)",
+      descriptionEn: "Premium quality UL certified power cord with pure copper wire. Ideal for computers, monitors, and industrial equipment.",
+      descriptionZh: "高品质UL认证电源线，采用纯铜线芯。适用于电脑、显示器及工业设备。",
+      featuresEn: ["UL/cUL Certified", "VW-1 Flame Resistance", "Durable PVC Jacket"],
+      featuresZh: ["UL/cUL 双重认证", "VW-1 阻燃等级", "耐磨PVC外被"],
+      params: [
+        { labelEn: "Rating", labelZh: "额定参数", valueEn: "10A/13A 125V", valueZh: "10A/13A 125V" },
+        { labelEn: "Wire Gauge", labelZh: "线规", valueEn: "18AWG / 16AWG", valueZh: "18AWG / 16AWG" }
+      ],
+      images: [
+        "https://images.unsplash.com/photo-1622675363311-3e1904de1869?auto=format&fit=crop&q=80&w=600"
+      ]
+    },
+    {
+      id: "sample-eu-plug-01",
+      sku: "EU-VDE-001",
+      category: "Plugs",
+      subCategory: "Europe",
+      nameEn: "European VDE Standard Plug Insert",
+      nameZh: "欧规 VDE 标准电源插头内架",
+      descriptionEn: "VDE certified plug insert compliant with EU safety standards. Precision molded for automated assembly.",
+      descriptionZh: "通过VDE认证的欧规插头内架，符合欧盟安全标准。精密注塑，适合自动化组装。",
+      featuresEn: ["VDE Certified", "High Impact Resistance", "Eco-friendly Material"],
+      featuresZh: ["VDE 认证", "高抗冲击性", "环保材质"],
+      params: [
+         { labelEn: "Standard", labelZh: "执行标准", valueEn: "CEE 7/7", valueZh: "CEE 7/7" }
+      ],
+      images: [
+         "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=600"
+      ]
+    }
+  ] as Product[],
+  categories: [
+    {
+      "name": "Plugs",
+      "subs": ["America", "Europe", "Asia", "Others"]
+    },
+    {
+      "name": "Power Cords",
+      "subs": ["UL Standard", "VDE Standard", "IEC Standard", "JIS Standard"]
+    },
+    {
+      "name": "Swivel Cords",
+      "subs": ["General"]
+    }
+  ]
+};
