@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Image as ImageIcon, Upload, X, RotateCcw, Package, Plus, Trash2, List, Award, FlaskConical, FileText, Download, Save, Loader2, CheckCircle2, Github, ExternalLink, HelpCircle, AlertTriangle, FileJson, ArrowRight, RefreshCw, AlertOctagon, Server, Search } from 'lucide-react';
+import { Settings, Image as ImageIcon, Upload, X, RotateCcw, Package, Plus, Trash2, List, Award, FlaskConical, FileText, Download, Save, Loader2, CheckCircle2, Github, ExternalLink, HelpCircle, AlertTriangle, FileJson, ArrowRight, RefreshCw, AlertOctagon, Server, Search, Factory, Microscope } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useProducts } from '../context/ProductContext';
 import { Button } from './Button';
@@ -24,6 +24,9 @@ export const ThemeEditor: React.FC = () => {
       logoImage, setLogoImage, 
       certImages, addBatchCertImages, removeCertImage,
       factoryImages, setFactoryImages,
+      productionImages, setProductionImages,
+      rohsImages, setRohsImages,
+      equipmentImages, setEquipmentImages,
       aboutCertsImage, setAboutCertsImage,
       resetTheme,
       localVersion, remoteVersion,
@@ -209,25 +212,63 @@ export const ThemeEditor: React.FC = () => {
       }
   }
 
-  const handleFactoryUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (files) {
-      setProcessStatus('Compressing Images...');
-      setIsProcessing(true);
-      try {
-        const fileArray = Array.from(files);
-        const base64Promises = fileArray.map((file) => processImage(file as File, 640, 0.3));
-        const newUrls = await Promise.all(base64Promises);
-        setFactoryImages([...factoryImages, ...newUrls]);
-      } finally {
-        setIsProcessing(false);
+  // --- NEW IMAGE HANDLERS ---
+  const handleProductionUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = event.target.files;
+      if (files && files.length > 0) {
+          setProcessStatus('Compressing...');
+          setIsProcessing(true);
+          try {
+              // Production lines currently stays as single image replacement for simplicity of the split view
+              const base64 = await processImage(files[0], 800, 0.3);
+              setProductionImages([base64]); 
+          } finally {
+              setIsProcessing(false);
+          }
       }
-    }
   };
 
-  const removeFactoryImage = (index: number) => {
-    setFactoryImages(factoryImages.filter((_, i) => i !== index));
+  const handleRohsUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = event.target.files;
+      if (files && files.length > 0) {
+          setProcessStatus('Compressing...');
+          setIsProcessing(true);
+          try {
+              const fileArray = Array.from(files);
+              const base64Promises = fileArray.map((file) => processImage(file as File, 800, 0.3));
+              const newUrls = await Promise.all(base64Promises);
+              // Append to existing array
+              setRohsImages([...rohsImages, ...newUrls]); 
+          } finally {
+              setIsProcessing(false);
+          }
+      }
   };
+
+  const removeRohsImage = (index: number) => {
+      setRohsImages(rohsImages.filter((_, i) => i !== index));
+  };
+
+  const handleEquipmentUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = event.target.files;
+      if (files) {
+        setProcessStatus('Compressing...');
+        setIsProcessing(true);
+        try {
+          const fileArray = Array.from(files);
+          const base64Promises = fileArray.map((file) => processImage(file as File, 640, 0.3));
+          const newUrls = await Promise.all(base64Promises);
+          setEquipmentImages([...equipmentImages, ...newUrls]);
+        } finally {
+          setIsProcessing(false);
+        }
+      }
+  };
+
+  const removeEquipmentImage = (index: number) => {
+      setEquipmentImages(equipmentImages.filter((_, i) => i !== index));
+  };
+
 
   const handleAboutCertUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -262,6 +303,8 @@ export const ThemeEditor: React.FC = () => {
   const removeProductImage = (index: number) => {
     setNewProdImages(prev => prev.filter((_, i) => i !== index));
   }
+
+  // ... (Rest of existing handlers) ...
 
   const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
       const selectedCatName = e.target.value;
@@ -308,6 +351,8 @@ export const ThemeEditor: React.FC = () => {
       setNewCatName('');
   }
 
+  // ... (Export/Import/Reset logic same as before) ...
+
   // --- STANDARD EXPORT FUNCTION ---
   const handleExportData = () => {
     const newVersion = Date.now().toString();
@@ -317,7 +362,10 @@ export const ThemeEditor: React.FC = () => {
             heroImage,
             logoImage,
             certImages,
-            factoryImages,
+            factoryImages, // Keep legacy
+            productionImages,
+            rohsImages,
+            equipmentImages,
             aboutCertsImage
         },
         products: products,
@@ -418,7 +466,13 @@ export const ThemeEditor: React.FC = () => {
                       if (themeData.heroImage) ops.push({ key: 'glam_hero_image', value: themeData.heroImage });
                       if (themeData.logoImage) ops.push({ key: 'glam_logo_image', value: themeData.logoImage });
                       if (themeData.certImages) ops.push({ key: 'glam_cert_images', value: themeData.certImages });
+                      
+                      // Restore all new fields
                       if (themeData.factoryImages) ops.push({ key: 'glam_factory_images', value: themeData.factoryImages });
+                      if (themeData.productionImages) ops.push({ key: 'glam_prod_images', value: themeData.productionImages });
+                      if (themeData.rohsImages) ops.push({ key: 'glam_rohs_images', value: themeData.rohsImages });
+                      if (themeData.equipmentImages) ops.push({ key: 'glam_equip_images', value: themeData.equipmentImages });
+
                       if (themeData.aboutCertsImage) ops.push({ key: 'glam_about_certs_image', value: themeData.aboutCertsImage });
 
                       ops.push({ key: 'glam_categories', value: categoriesData });
@@ -495,7 +549,10 @@ export const ThemeEditor: React.FC = () => {
                     heroImage,
                     logoImage,
                     certImages,
-                    factoryImages,
+                    factoryImages, // Legacy
+                    productionImages,
+                    rohsImages,
+                    equipmentImages,
                     aboutCertsImage
                 },
                 products,
@@ -527,6 +584,7 @@ export const ThemeEditor: React.FC = () => {
     }, 100);
   }
 
+  // ... (Clean Repo & Diags) ...
   const cleanRepoUrl = (url: string) => {
     let clean = url.trim();
     if (clean.endsWith('.git')) clean = clean.slice(0, -4);
@@ -537,27 +595,23 @@ export const ThemeEditor: React.FC = () => {
   const getGithubUploadUrl = () => {
       if (!repoUrl) return '';
       const clean = cleanRepoUrl(repoUrl);
-      // Direct link to the public folder upload interface for 'main' branch
       return `${clean}/upload/main/public`;
   }
 
-  // --- NEW: SERVER DIAGNOSTICS ---
   const checkServerStatus = async () => {
       setIsCheckingServer(true);
       setServerStats(null);
       try {
           const timestamp = Date.now();
           const random = Math.random();
-          // Fix: Use relative path './data.json'
           const targetUrl = `./data.json?t=${timestamp}&r=${random}`;
           
-          // Use fetch to get headers only first
           const res = await fetch(targetUrl, { 
               method: 'GET',
               cache: 'no-store'
           });
           
-          const finalUrl = res.url; // See what URL the browser actually used
+          const finalUrl = res.url; 
           
           if (!res.ok) {
               setServerStats({ 
@@ -569,7 +623,6 @@ export const ThemeEditor: React.FC = () => {
               return;
           }
 
-          // Check for HTML masquerading as JSON
           const contentType = res.headers.get("content-type");
           if (contentType && contentType.indexOf("application/json") === -1) {
               setServerStats({
@@ -701,7 +754,7 @@ export const ThemeEditor: React.FC = () => {
 
             <div className="p-6 max-h-[500px] overflow-y-auto">
               
-              {/* --- GITHUB TAB (UPDATED INSTRUCTIONS) --- */}
+              {/* --- GITHUB TAB --- */}
               {activeTab === 'github' && (
                   <div className="space-y-4">
                       {/* Repo Settings */}
@@ -741,10 +794,6 @@ export const ThemeEditor: React.FC = () => {
 
                       <div className="bg-gray-50 p-3 rounded border">
                            <h4 className="font-bold text-xs mb-2">Step 2: Upload to GitHub</h4>
-                           <p className="text-[10px] text-gray-600 mb-2">
-                               The app cannot save directly to GitHub. You must upload the file manually to the <strong>public</strong> folder.
-                           </p>
-
                            {repoUrl ? (
                               <a 
                                 href={getGithubUploadUrl()} 
@@ -761,20 +810,6 @@ export const ThemeEditor: React.FC = () => {
                                    Enter Repo URL First
                                </Button>
                            )}
-                           
-                           <div className="mt-2 text-[10px] bg-red-50 p-2 rounded border border-red-200 text-red-800">
-                                <strong className="flex items-center gap-1"><AlertOctagon className="w-3 h-3"/> CRITICAL CHECK:</strong>
-                                1. If the green button says <strong>"Propose changes"</strong>, the file WILL NOT update immediately. You created a Pull Request.<br/>
-                                2. You MUST select <strong>"Commit directly to the main branch"</strong>.<br/>
-                                3. If file > 25MB, GitHub Web Upload will fail silently.
-                           </div>
-                           
-                           <div className="mt-2 text-[10px] bg-amber-50 p-2 rounded border border-amber-200 text-amber-800">
-                                <strong>Troubleshooting:</strong><br/>
-                                1. Go to public folder on GitHub.<br/>
-                                2. <strong>DELETE</strong> the old data.json (Trash icon) & Commit.<br/>
-                                3. Upload new file & Ensure "Commit directly" is checked.
-                           </div>
                       </div>
 
                       {/* DIAGNOSTICS */}
@@ -788,20 +823,10 @@ export const ThemeEditor: React.FC = () => {
                                 <Trash2 className="w-3 h-3 mr-1" /> Force Clear Local Cache
                             </Button>
                       </div>
-
-                      {/* Size Warning */}
-                      {fileSizeMB > 24 && (
-                          <div className="bg-red-50 text-red-800 p-2 rounded text-[10px] flex items-start border border-red-200">
-                              <AlertTriangle className="w-4 h-4 mr-1 flex-shrink-0" />
-                              <div className="flex-1">
-                                  <strong>File > 25MB ({fileSizeMB.toFixed(1)}MB)</strong><br/>
-                                  GitHub Web Upload will likely FAIL. Please remove some images or use GitHub Desktop.
-                              </div>
-                          </div>
-                      )}
                   </div>
               )}
               
+              {/* --- VISUAL TAB --- */}
               {activeTab === 'visual' && (
                 <div className="space-y-6">
                   <div>
@@ -829,6 +854,7 @@ export const ThemeEditor: React.FC = () => {
                 </div>
               )}
 
+              {/* --- CERTS TAB --- */}
               {activeTab === 'certs' && (
                   <div className="space-y-4">
                       {certSlots.map(slot => {
@@ -859,23 +885,54 @@ export const ThemeEditor: React.FC = () => {
                   </div>
               )}
               
+              {/* --- ABOUT TAB (UPDATED) --- */}
               {activeTab === 'about' && (
                   <div className="space-y-6">
+                      <div className="bg-gray-50 p-3 rounded border">
+                          <h4 className="font-bold text-xs text-gray-800 mb-3 uppercase flex items-center"><Factory className="w-3 h-3 mr-1"/> Advanced Manufacturing</h4>
+                          
+                          <div className="mb-4">
+                              <label className="text-xs font-medium text-gray-600 mb-1 block">Production Lines (Left Split)</label>
+                              <div className="aspect-[3/2] w-full bg-gray-200 rounded overflow-hidden relative border">
+                                  {productionImages[0] ? <img src={productionImages[0]} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-[10px] text-gray-500">No Image</div>}
+                                  <input type="file" accept="image/*" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleProductionUpload} disabled={isProcessing} />
+                              </div>
+                              <Button variant="white" className="w-full !text-[10px] !py-1 mt-1">Change Production Photo</Button>
+                          </div>
+
+                          <div className="mb-4">
+                              <label className="text-xs font-medium text-gray-600 mb-1 block">RoHS Lab Gallery (Right Split / Slideshow)</label>
+                              <div className="grid grid-cols-3 gap-2 mb-2">
+                                  {rohsImages.map((img, idx) => (
+                                      <div key={idx} className="relative aspect-square rounded overflow-hidden border">
+                                          <img src={img} className="w-full h-full object-cover" />
+                                          <button onClick={() => removeRohsImage(idx)} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl hover:bg-red-600"><X className="w-3 h-3" /></button>
+                                      </div>
+                                  ))}
+                                  <div className="aspect-square border-2 border-dashed border-gray-300 rounded hover:border-gray-400 relative flex items-center justify-center bg-gray-50">
+                                      <Plus className="w-6 h-6 text-gray-300" />
+                                      <input type="file" accept="image/*" multiple className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleRohsUpload} disabled={isProcessing} />
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+
                       <div>
-                        <label className="text-sm font-medium text-gray-700 mb-2 flex items-center"><FlaskConical className="w-4 h-4 mr-2" /> Factory Images</label>
+                        <label className="text-sm font-medium text-gray-700 mb-2 flex items-center"><Microscope className="w-4 h-4 mr-2" /> Lab Equipment Gallery</label>
                         <div className="grid grid-cols-3 gap-2 mb-2">
-                              {factoryImages.map((img, idx) => (
+                              {equipmentImages.map((img, idx) => (
                                   <div key={idx} className="relative aspect-square rounded overflow-hidden border">
                                       <img src={img} className="w-full h-full object-cover" />
-                                      <button onClick={() => removeFactoryImage(idx)} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl hover:bg-red-600"><X className="w-3 h-3" /></button>
+                                      <button onClick={() => removeEquipmentImage(idx)} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl hover:bg-red-600"><X className="w-3 h-3" /></button>
                                   </div>
                               ))}
                               <div className="aspect-square border-2 border-dashed border-gray-300 rounded hover:border-gray-400 relative flex items-center justify-center bg-gray-50">
                                   <Plus className="w-6 h-6 text-gray-300" />
-                                  <input type="file" accept="image/*" multiple className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFactoryUpload} disabled={isProcessing} />
+                                  <input type="file" accept="image/*" multiple className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleEquipmentUpload} disabled={isProcessing} />
                               </div>
                           </div>
                       </div>
+
                       <div className="border-t pt-4">
                           <label className="text-sm font-medium text-gray-700 mb-2 flex items-center"><Award className="w-4 h-4 mr-2" /> Certifications Showcase (Image)</label>
                         <div className="aspect-[4/1] w-full bg-gray-100 rounded border mb-2 flex items-center justify-center overflow-hidden">
@@ -889,6 +946,7 @@ export const ThemeEditor: React.FC = () => {
                   </div>
               )}
 
+              {/* --- PRODUCT TAB --- */}
               {activeTab === 'product' && (
                 <div className="space-y-4">
                   <div>
@@ -928,6 +986,7 @@ export const ThemeEditor: React.FC = () => {
                 </div>
               )}
 
+              {/* --- MANAGE TAB --- */}
               {activeTab === 'manage' && (
                 <div className="space-y-6">
                    <div className="bg-blue-50 border border-blue-100 rounded p-4">

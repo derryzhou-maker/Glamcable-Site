@@ -1,23 +1,29 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Language } from '../types';
 import { TRANSLATIONS } from '../constants';
 import { useTheme } from '../context/ThemeContext';
-import { Download, FileText } from 'lucide-react';
+import { Download, FileText, ImageOff } from 'lucide-react';
 
 interface AboutProps {
   lang: Language;
 }
 
 export const About: React.FC<AboutProps> = ({ lang }) => {
-  const { factoryImages, aboutCertsImage, certImages } = useTheme();
+  const { aboutCertsImage, productionImages, rohsImages, equipmentImages } = useTheme();
 
-  // Fallback default images if user hasn't uploaded any
-  const defaultImages = [
-      "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=800",
-      "https://images.unsplash.com/photo-1622675363311-3e1904de1869?auto=format&fit=crop&q=80&w=800"
-  ];
+  const prodImg = productionImages.length > 0 ? productionImages[0] : null;
+  const effectiveRohsImages = rohsImages.length > 0 ? rohsImages : [];
 
-  const featuredImages = factoryImages.length > 0 ? factoryImages.slice(0, 2) : defaultImages;
+  const [rohsIndex, setRohsIndex] = useState(0);
+
+  useEffect(() => {
+    if (effectiveRohsImages.length > 1) {
+      const interval = setInterval(() => {
+        setRohsIndex((prev) => (prev + 1) % effectiveRohsImages.length);
+      }, 4000);
+      return () => clearInterval(interval);
+    }
+  }, [effectiveRohsImages.length]);
 
   return (
     <div className="bg-white py-16">
@@ -55,17 +61,41 @@ export const About: React.FC<AboutProps> = ({ lang }) => {
 
         {/* Factory Image & Text */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center mb-20">
+           {/* Split View: Production Line (Top) & RoHS Lab (Bottom) */}
            <div className="rounded-xl overflow-hidden shadow-lg grid grid-rows-2 gap-2 h-96">
-             {/* If we have 1 image, show full height. If 2, show split. */}
-             {featuredImages.length === 1 ? (
-                 <img src={featuredImages[0]} alt="Factory" className="w-full h-full object-cover" />
-             ) : (
-                 <>
-                    <img src={featuredImages[0]} alt="Factory Machine" className="w-full h-full object-cover" />
-                    {featuredImages[1] && <img src={featuredImages[1]} alt="Production Line" className="w-full h-full object-cover" />}
-                 </>
-             )}
+                <div className="relative group overflow-hidden bg-gray-100 flex items-center justify-center">
+                    {prodImg ? (
+                        <img src={prodImg} alt="Production Line" className="w-full h-full object-cover" />
+                    ) : (
+                        <div className="text-gray-400 text-xs text-center">
+                            <ImageOff className="w-8 h-8 mx-auto mb-2 opacity-50"/>
+                            <p>Production Line</p>
+                            <p className="text-[10px]">(Upload in Editor)</p>
+                        </div>
+                    )}
+                    <div className="absolute bottom-0 left-0 bg-black/60 text-white text-xs px-2 py-1">Production Lines</div>
+                </div>
+                <div className="relative group overflow-hidden bg-gray-100 flex items-center justify-center">
+                    {effectiveRohsImages.length > 0 ? (
+                        effectiveRohsImages.map((img, idx) => (
+                            <img 
+                              key={idx} 
+                              src={img} 
+                              alt={`RoHS Lab ${idx}`} 
+                              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${idx === rohsIndex ? 'opacity-100' : 'opacity-0'}`} 
+                            />
+                        ))
+                    ) : (
+                        <div className="text-gray-400 text-xs text-center">
+                            <ImageOff className="w-8 h-8 mx-auto mb-2 opacity-50"/>
+                            <p>RoHS Lab</p>
+                            <p className="text-[10px]">(Upload in Editor)</p>
+                        </div>
+                    )}
+                    <div className="absolute bottom-0 left-0 bg-black/60 text-white text-xs px-2 py-1 z-10">RoHS Lab</div>
+                </div>
            </div>
+
            <div>
              <h2 className="text-2xl font-bold text-gray-900 mb-4">
                {lang === 'en' ? "Advanced Manufacturing" : "先进制造能力"}
@@ -82,26 +112,32 @@ export const About: React.FC<AboutProps> = ({ lang }) => {
            </div>
         </div>
         
-        {/* Full Factory Gallery (Only if uploaded) */}
-        {factoryImages.length > 0 && (
-            <div className="mb-20">
-                <div className="text-center mb-10">
-                    <h2 className="text-2xl font-bold text-gray-900">
-                        {lang === 'en' ? "Factory & Lab Environment" : "工厂与实验室环境"}
-                    </h2>
-                    <div className="w-16 h-1 bg-secondary mx-auto mt-4"></div>
-                </div>
+        {/* Lab Equipment Gallery (Replaces general Factory Gallery) */}
+        <div className="mb-20">
+            <div className="text-center mb-10">
+                <h2 className="text-2xl font-bold text-gray-900">
+                    {lang === 'en' ? "Lab Equipment" : "实验室设备"}
+                </h2>
+                <div className="w-16 h-1 bg-secondary mx-auto mt-4"></div>
+            </div>
+            {equipmentImages.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                    {factoryImages.map((img, idx) => (
-                        <div key={idx} className="group relative aspect-[4/3] rounded-lg overflow-hidden shadow-sm hover:shadow-lg transition-all">
-                            <img src={img} alt={`Factory ${idx}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    {equipmentImages.map((img, idx) => (
+                        <div key={idx} className="group relative aspect-[4/3] rounded-lg overflow-hidden shadow-sm hover:shadow-lg transition-all border border-gray-100">
+                            <img src={img} alt={`Lab Equipment ${idx}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                         </div>
                     ))}
                 </div>
-            </div>
-        )}
+            ) : (
+                <div className="w-full h-48 bg-gray-50 border-2 border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center text-gray-400">
+                    <ImageOff className="w-10 h-10 mb-2 opacity-50"/>
+                    <p>{lang === 'en' ? "No Equipment Photos Uploaded" : "暂无设备照片"}</p>
+                    <p className="text-xs mt-1">{lang === 'en' ? "Please upload in Editor > About" : "请在 编辑器 > About 中上传"}</p>
+                </div>
+            )}
+        </div>
 
-        {/* Certs Image Section (Replaced text grid) */}
+        {/* Certs Image Section */}
         <div className="bg-neutral-50 p-12 rounded-xl text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-8">{TRANSLATIONS.globalCerts[lang]}</h2>
           <div className="flex justify-center">
@@ -112,8 +148,7 @@ export const About: React.FC<AboutProps> = ({ lang }) => {
                   className="w-full max-w-5xl h-auto object-contain shadow-md rounded bg-white" 
                 />
              ) : (
-                // Placeholder if no image uploaded
-                <div className="w-full max-w-3xl h-32 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center text-gray-400">
+                <div className="w-full max-w-3xl h-32 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center text-gray-400 bg-white">
                     <span>{lang === 'en' ? "Certification Image (Upload in Editor > About)" : "认证图片展示位 (请在编辑器 > About 中上传)"}</span>
                 </div>
              )}

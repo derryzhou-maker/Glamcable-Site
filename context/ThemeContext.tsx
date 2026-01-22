@@ -12,8 +12,17 @@ interface ThemeContextType {
   addCertImage: (key: string, url: string, name: string) => void;
   addBatchCertImages: (key: string, newFiles: CertFile[]) => void;
   removeCertImage: (key: string, index: number) => void;
-  factoryImages: string[];
+  factoryImages: string[]; // Deprecated
   setFactoryImages: (images: string[]) => void;
+  
+  // New Image Categories
+  productionImages: string[];
+  setProductionImages: (images: string[]) => void;
+  rohsImages: string[];
+  setRohsImages: (images: string[]) => void;
+  equipmentImages: string[];
+  setEquipmentImages: (images: string[]) => void;
+
   aboutCertsImage: string | null;
   setAboutCertsImage: (url: string) => void;
   resetTheme: () => void;
@@ -30,7 +39,14 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [heroImage, setHeroImageState] = useState<string>(INITIAL_DATA.theme.heroImage);
   const [logoImage, setLogoImageState] = useState<string | null>(INITIAL_DATA.theme.logoImage);
   const [certImages, setCertImagesState] = useState<Record<string, CertFile[]>>(INITIAL_DATA.theme.certImages);
+  
   const [factoryImages, setFactoryImagesState] = useState<string[]>(INITIAL_DATA.theme.factoryImages);
+  
+  // New States
+  const [productionImages, setProductionImagesState] = useState<string[]>(INITIAL_DATA.theme.productionImages);
+  const [rohsImages, setRohsImagesState] = useState<string[]>(INITIAL_DATA.theme.rohsImages);
+  const [equipmentImages, setEquipmentImagesState] = useState<string[]>(INITIAL_DATA.theme.equipmentImages);
+
   const [aboutCertsImage, setAboutCertsImageState] = useState<string | null>(INITIAL_DATA.theme.aboutCertsImage);
   const [isLoaded, setIsLoaded] = useState(false);
   
@@ -44,6 +60,11 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const savedLogo = await dbGet('glam_logo_image');
       const savedCerts = await dbGet('glam_cert_images');
       const savedFactory = await dbGet('glam_factory_images');
+      
+      const savedProd = await dbGet('glam_prod_images');
+      const savedRohs = await dbGet('glam_rohs_images');
+      const savedEquip = await dbGet('glam_equip_images');
+
       const savedAboutCerts = await dbGet('glam_about_certs_image');
 
       if (savedHero) setHeroImageState(savedHero);
@@ -51,7 +72,6 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       
       if (savedCerts) {
           const normalized: Record<string, CertFile[]> = {};
-          // Safety check: ensure savedCerts is an object
           if (typeof savedCerts === 'object' && savedCerts !== null) {
               Object.keys(savedCerts).forEach(key => {
                   const val = savedCerts[key];
@@ -60,7 +80,6 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                           if (typeof item === 'string') {
                               return { url: item, name: `Certificate ${idx + 1}.pdf` };
                           }
-                          // Ensure item is object
                           return item && typeof item === 'object' ? item : { url: '', name: 'Unknown' }; 
                       });
                   } else if (typeof val === 'string') {
@@ -72,16 +91,18 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
 
       if (savedFactory && Array.isArray(savedFactory)) setFactoryImagesState(savedFactory);
+      if (savedProd && Array.isArray(savedProd)) setProductionImagesState(savedProd);
+      if (savedRohs && Array.isArray(savedRohs)) setRohsImagesState(savedRohs);
+      if (savedEquip && Array.isArray(savedEquip)) setEquipmentImagesState(savedEquip);
+
       if (savedAboutCerts) setAboutCertsImageState(savedAboutCerts);
   }
 
   useEffect(() => {
     const loadTheme = async () => {
       try {
-        // 0. CHECK FORCE LOAD FLAG
         const forceLocalLoad = localStorage.getItem('glam_force_local_load') === 'true';
 
-        // STRICT MODE: If forced, DO NOT even attempt to fetch from server.
         if (forceLocalLoad) {
             console.log(">>> [ThemeContext] FORCE LOAD ACTIVE. Skipping Network.");
             await loadFromDB();
@@ -96,13 +117,10 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         let fetchedData = null;
         let fetchedVersion = '';
 
-        // 1. Try to fetch the external data.json
         try {
-            // FIX: Use relative path './data.json' instead of absolute '/data.json' to support GitHub Pages subpaths
             const res = await fetch('./data.json?t=' + Date.now() + '&r=' + Math.random(), { cache: 'no-store' }); 
             
             if (res.ok) {
-                // Check content type to avoid parsing 404 HTML pages as JSON
                 const contentType = res.headers.get("content-type");
                 if (contentType && contentType.indexOf("application/json") === -1) {
                     console.warn("[ThemeContext] Server returned HTML instead of JSON. Likely 404 on subpath.");
@@ -125,8 +143,6 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             console.warn("[ThemeContext] Failed to fetch data.json", err);
         }
 
-        // 2. Logic: Should we overwrite local data?
-        // Improved logic: Allow overwrite if remote is strictly newer
         const isLocalBackup = dbVersion.length > 10 && /^\d+$/.test(dbVersion);
         const isRemoteBackup = fetchedVersion.length > 10 && /^\d+$/.test(fetchedVersion);
         
@@ -134,10 +150,8 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
         if (fetchedData && fetchedData.theme && fetchedVersion && fetchedVersion !== dbVersion) {
              if (!isLocalBackup) {
-                 // Local is not a backup (e.g. fresh install or old version), accept anything different
                  shouldOverwrite = true;
              } else if (isRemoteBackup && Number(fetchedVersion) > Number(dbVersion)) {
-                 // Both are timestamp backups, but Remote is NEWER. Allow update.
                  shouldOverwrite = true;
                  console.log(`[ThemeContext] Remote version (${fetchedVersion}) is newer than Local (${dbVersion}). Updating...`);
              } else {
@@ -148,32 +162,39 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (shouldOverwrite && fetchedData) {
             console.log(">>> Theme Update Triggered: Remote Version != Local Version. Overwriting.");
             
-            // Normalize theme data from JSON (Safety Checks)
             const theme = fetchedData.theme;
             const safeHero = theme.heroImage || INITIAL_DATA.theme.heroImage;
             const safeLogo = theme.logoImage || null;
-            const safeCerts = theme.certImages || {}; // Ensure object
+            const safeCerts = theme.certImages || {}; 
             const safeFactory = Array.isArray(theme.factoryImages) ? theme.factoryImages : [];
+            
+            const safeProd = Array.isArray(theme.productionImages) ? theme.productionImages : INITIAL_DATA.theme.productionImages;
+            const safeRohs = Array.isArray(theme.rohsImages) ? theme.rohsImages : INITIAL_DATA.theme.rohsImages;
+            const safeEquip = Array.isArray(theme.equipmentImages) ? theme.equipmentImages : INITIAL_DATA.theme.equipmentImages;
+
             const safeAbout = theme.aboutCertsImage || null;
 
-            // Overwrite DB with new JSON data
             await dbSetMany([
                 { key: 'glam_data_version', value: fetchedVersion },
                 { key: 'glam_hero_image', value: safeHero },
                 { key: 'glam_logo_image', value: safeLogo },
                 { key: 'glam_cert_images', value: safeCerts },
                 { key: 'glam_factory_images', value: safeFactory },
+                { key: 'glam_prod_images', value: safeProd },
+                { key: 'glam_rohs_images', value: safeRohs },
+                { key: 'glam_equip_images', value: safeEquip },
                 { key: 'glam_about_certs_image', value: safeAbout }
             ]);
 
-            // Set state to new data
             setHeroImageState(safeHero);
             setLogoImageState(safeLogo);
             setCertImagesState(safeCerts);
             setFactoryImagesState(safeFactory);
+            setProductionImagesState(safeProd);
+            setRohsImagesState(safeRohs);
+            setEquipmentImagesState(safeEquip);
             setAboutCertsImageState(safeAbout);
         } else {
-             // Load from DB
             await loadFromDB();
         }
 
@@ -229,17 +250,36 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       if (isLoaded) dbSet('glam_factory_images', images);
   };
 
+  const setProductionImages = (images: string[]) => {
+      setProductionImagesState(images);
+      if (isLoaded) dbSet('glam_prod_images', images);
+  }
+
+  const setRohsImages = (images: string[]) => {
+      setRohsImagesState(images);
+      if (isLoaded) dbSet('glam_rohs_images', images);
+  }
+
+  const setEquipmentImages = (images: string[]) => {
+      setEquipmentImagesState(images);
+      if (isLoaded) dbSet('glam_equip_images', images);
+  }
+
   const setAboutCertsImage = (url: string) => {
       setAboutCertsImageState(url);
       if (isLoaded) dbSet('glam_about_certs_image', url);
   };
 
   const resetTheme = () => {
-    // Reset to initial data from CONSTANT
     setHeroImageState(INITIAL_DATA.theme.heroImage);
     setLogoImageState(INITIAL_DATA.theme.logoImage);
     setCertImagesState(INITIAL_DATA.theme.certImages);
     setFactoryImagesState(INITIAL_DATA.theme.factoryImages);
+    
+    setProductionImagesState(INITIAL_DATA.theme.productionImages);
+    setRohsImagesState(INITIAL_DATA.theme.rohsImages);
+    setEquipmentImagesState(INITIAL_DATA.theme.equipmentImages);
+
     setAboutCertsImageState(INITIAL_DATA.theme.aboutCertsImage);
     
     dbDelete('glam_data_version');
@@ -247,6 +287,9 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     dbDelete('glam_logo_image');
     dbDelete('glam_cert_images');
     dbDelete('glam_factory_images');
+    dbDelete('glam_prod_images');
+    dbDelete('glam_rohs_images');
+    dbDelete('glam_equip_images');
     dbDelete('glam_about_certs_image');
   };
 
@@ -254,7 +297,6 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     if (!data) return;
     const batchOps = [];
 
-    // Persist version if provided
     if (version) {
         batchOps.push({ key: 'glam_data_version', value: version });
     }
@@ -287,6 +329,21 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setFactoryImagesState(data.factoryImages);
         batchOps.push({ key: 'glam_factory_images', value: data.factoryImages });
     }
+
+    // Restore new fields if present
+    if (data.productionImages) {
+        setProductionImagesState(data.productionImages);
+        batchOps.push({ key: 'glam_prod_images', value: data.productionImages });
+    }
+    if (data.rohsImages) {
+        setRohsImagesState(data.rohsImages);
+        batchOps.push({ key: 'glam_rohs_images', value: data.rohsImages });
+    }
+    if (data.equipmentImages) {
+        setEquipmentImagesState(data.equipmentImages);
+        batchOps.push({ key: 'glam_equip_images', value: data.equipmentImages });
+    }
+
     if (data.aboutCertsImage) {
         setAboutCertsImageState(data.aboutCertsImage);
         batchOps.push({ key: 'glam_about_certs_image', value: data.aboutCertsImage });
@@ -303,6 +360,9 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         logoImage, setLogoImage, 
         certImages, addCertImage, addBatchCertImages, removeCertImage,
         factoryImages, setFactoryImages,
+        productionImages, setProductionImages,
+        rohsImages, setRohsImages,
+        equipmentImages, setEquipmentImages,
         aboutCertsImage, setAboutCertsImage,
         resetTheme, restoreTheme, isLoaded,
         localVersion, remoteVersion
