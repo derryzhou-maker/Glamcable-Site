@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "prebuild": "cp data_core.json public/ 2>/dev/null || : && cp data_about.json public/ 2>/dev/null || : && cp data_products.json public/ 2>/dev/null || :",
+    "build": "npm run prebuild && tsc && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

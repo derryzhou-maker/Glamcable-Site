@@ -998,7 +998,8 @@ export const ThemeEditor: React.FC = () => {
                              <h4 className="font-bold text-xs text-gray-900">Upload ALL 3 Files</h4>
                           </div>
                           <p className="text-[10px] text-gray-600 mb-2 leading-snug">
-                             Drag <strong>ALL 3 files</strong> you just downloaded into the GitHub <strong>public</strong> folder upload page.
+                             Drag <strong>ALL 3 files</strong> into the <strong>/public</strong> folder on GitHub. <br/>
+                             <span className="text-red-600 font-bold">DO NOT upload to the root folder.</span> Vercel will ignore them if they are not in <strong>public/</strong>.
                           </p>
                            {repoUrl ? (
                               <a 
@@ -1008,7 +1009,7 @@ export const ThemeEditor: React.FC = () => {
                                 className={`w-full block ${!generationSuccess ? 'pointer-events-none' : ''}`}
                               >
                                   <Button variant="secondary" className="w-full !py-2 text-xs" disabled={!generationSuccess}>
-                                      <ExternalLink className="w-4 h-4 mr-2" /> Open Upload Page
+                                      <ExternalLink className="w-4 h-4 mr-2" /> Open 'public' Upload Page
                                   </Button>
                               </a>
                            ) : (
