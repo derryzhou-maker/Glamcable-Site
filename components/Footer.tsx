@@ -1,10 +1,9 @@
 import React from 'react';
-import { MapPin, Phone, Mail, Linkedin, Youtube, RefreshCw, Trash2 } from 'lucide-react';
+import { MapPin, Phone, Mail, Linkedin, Youtube, RefreshCw, Trash2, Database } from 'lucide-react';
 import { Language } from '../types';
 import { TRANSLATIONS, CONTACT_INFO, NAV_ITEMS } from '../constants';
 import { useTheme } from '../context/ThemeContext';
 import { Logo } from './Logo';
-import { INITIAL_DATA } from '../initialData';
 import { clearDatabase } from '../utils/db';
 
 interface FooterProps {
@@ -13,11 +12,8 @@ interface FooterProps {
 }
 
 export const Footer: React.FC<FooterProps> = ({ lang, navigate }) => {
-  const { logoImage } = useTheme();
+  const { logoImage, localVersion, remoteVersion } = useTheme();
   
-  // Safe access to version, fallback if not present
-  const dataVersion = (INITIAL_DATA as any).version || '1.0.0';
-
   const handleForceUpdate = async () => {
     if (window.confirm("CRITICAL RESET: This will delete all local cache and force-download the latest content from the server.\n\nUse this if you don't see your latest updates.\n\nProceed?")) {
         console.log("Nuclearing cache...");
@@ -106,15 +102,20 @@ export const Footer: React.FC<FooterProps> = ({ lang, navigate }) => {
 
         <div className="mt-12 pt-8 border-t border-gray-200 text-center text-sm text-gray-500 flex flex-col items-center gap-2">
           <span>{TRANSLATIONS.copyright[lang]}</span>
-          <div className="flex items-center gap-3">
-             <span className="text-[10px] text-gray-300 font-mono">v{dataVersion}</span>
+          <div className="flex flex-col items-center gap-1 mt-2">
+             <div className="flex items-center gap-3 text-[10px] text-gray-400 font-mono">
+                 <span title="Version of data currently displayed">Local: {localVersion?.slice(-6) || 'N/A'}</span>
+                 <span>|</span>
+                 <span title="Version of data on the server">Remote: {remoteVersion?.slice(-6) || 'Fetching...'}</span>
+             </div>
+             
              <button 
                 onClick={handleForceUpdate}
-                className="flex items-center text-[10px] bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1 rounded transition-colors border border-red-200"
+                className="flex items-center text-[10px] bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded transition-colors border border-red-200 mt-1"
                 title="Completely wipe local data and reload from server"
              >
-                <Trash2 className="w-3 h-3 mr-1" />
-                {lang === 'en' ? "Hard Reset Data" : "重置所有数据"}
+                <Database className="w-3 h-3 mr-1" />
+                {lang === 'en' ? "Force Reload Data" : "强制重新加载数据"}
              </button>
           </div>
         </div>
