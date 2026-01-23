@@ -89,7 +89,7 @@ export const Contact: React.FC<ContactProps> = ({ lang, initialProduct }) => {
                 <div className="flex items-start mb-4">
                    <Clock className="w-6 h-6 mr-3 mt-1" />
                    <div>
-                     <p>Mon - Sat: 8:30 AM - 6:00 PM</p>
+                     <p>Mon - Fri: 9:00 AM - 6:00 PM</p>
                      <p className="text-blue-200 text-sm">UTC+8</p>
                    </div>
                 </div>

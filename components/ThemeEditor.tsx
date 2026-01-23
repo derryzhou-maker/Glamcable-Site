@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Image as ImageIcon, Upload, X, RotateCcw, Package, Plus, Trash2, List, Award, FlaskConical, FileText, Download, Save, Loader2, CheckCircle2, Github, ExternalLink, HelpCircle, AlertTriangle, FileJson, ArrowRight, RefreshCw, AlertOctagon, Server, Search, Factory, Microscope } from 'lucide-react';
+import { Settings, Image as ImageIcon, Upload, X, RotateCcw, Package, Plus, Trash2, List, Award, Factory, Microscope, Download, Save, Loader2, CheckCircle2, Github, ExternalLink, ArrowRight, RefreshCw, AlertTriangle, FileJson, FileText, Layers, Database, Split, Zap } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useProducts } from '../context/ProductContext';
 import { Button } from './Button';
 import { Product, CertFile } from '../types';
-import { dbGet, dbRestoreLargeData, clearDatabase } from '../utils/db'; 
+import { dbRestoreLargeData, clearDatabase, dbGet } from '../utils/db'; 
 
 export const ThemeEditor: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -16,13 +16,16 @@ export const ThemeEditor: React.FC = () => {
   const [progress, setProgress] = useState(0); 
   
   // Server Diag State
-  const [serverStats, setServerStats] = useState<{size: string, version: string, status: string, url: string} | null>(null);
+  const [serverStats, setServerStats] = useState<Record<string, {size: string, version: string, status: string, url: string}>>({});
   const [isCheckingServer, setIsCheckingServer] = useState(false);
   
+  // Manual Cert Input State
+  const [manualInputs, setManualInputs] = useState<Record<string, string>>({});
+
   const { 
       heroImage, setHeroImage, 
       logoImage, setLogoImage, 
-      certImages, addBatchCertImages, removeCertImage,
+      certImages, addBatchCertImages, addCertImage, removeCertImage,
       factoryImages, setFactoryImages,
       productionImages, setProductionImages,
       rohsImages, setRohsImages,
@@ -38,6 +41,7 @@ export const ThemeEditor: React.FC = () => {
       addProduct, deleteProduct, 
       addCategory, deleteCategory, 
       resetProducts, 
+      restoreProducts,
       isLoaded: productsLoaded 
   } = useProducts();
 
@@ -52,7 +56,7 @@ export const ThemeEditor: React.FC = () => {
 
   // --- GitHub Export State ---
   const DEFAULT_REPO = 'https://github.com/derryzhou-maker/Glamcable-Site';
-  const [fileSizeMB, setFileSizeMB] = useState(0);
+  const [fileSizes, setFileSizes] = useState({ core: 0, about: 0, products: 0 });
   const [repoUrl, setRepoUrl] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationSuccess, setGenerationSuccess] = useState(false);
@@ -86,8 +90,8 @@ export const ThemeEditor: React.FC = () => {
   useEffect(() => {
     if (activeTab === 'github') {
         setGenerationSuccess(false);
-        setFileSizeMB(0);
-        setServerStats(null);
+        setFileSizes({ core: 0, about: 0, products: 0 });
+        setServerStats({});
     }
   }, [activeTab]);
 
@@ -104,7 +108,7 @@ export const ThemeEditor: React.FC = () => {
       { key: 'iso9001', label: 'ISO 9001 (PDF Only)' },
   ];
 
-  const processImage = (file: File, maxWidth: number, quality: number = 0.3): Promise<string> => {
+  const processImage = (file: File, maxWidth: number, quality: number = 0.6): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
@@ -129,6 +133,7 @@ export const ThemeEditor: React.FC = () => {
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0, width, height);
+            // Default to JPEG 0.6 for good balance
             const dataUrl = canvas.toDataURL('image/jpeg', quality);
             console.log(`Compressed ${file.name}: ${Math.round(dataUrl.length / 1024)}KB`);
             resolve(dataUrl);
@@ -142,13 +147,127 @@ export const ThemeEditor: React.FC = () => {
     });
   };
 
+  // --- SMART OPTIMIZER (RESIZES EXISTING DATA) ---
+  const handleSmartOptimization = async () => {
+      if (!confirm("This will scan ALL images (Products, About, Certs) and compress them to < 1000px resolution to significantly reduce file size.\n\nThis is the BEST way to fix Vercel deployment issues.\n\nProceed?")) {
+          return;
+      }
+
+      setIsProcessing(true);
+      setProcessStatus("Initializing Optimizer...");
+      setProgress(0);
+
+      const resizeBase64 = (base64: string, maxWidth: number): Promise<string> => {
+          return new Promise((resolve) => {
+              // If not image or too short, skip
+              if (!base64 || !base64.startsWith('data:image')) {
+                  resolve(base64);
+                  return;
+              }
+              
+              const img = new Image();
+              img.src = base64;
+              img.onload = () => {
+                  if (img.width <= maxWidth) {
+                      // Already small enough, just resolve original
+                      resolve(base64); 
+                      return;
+                  }
+                  
+                  const canvas = document.createElement('canvas');
+                  const scale = maxWidth / img.width;
+                  canvas.width = maxWidth;
+                  canvas.height = img.height * scale;
+                  
+                  const ctx = canvas.getContext('2d');
+                  if (ctx) {
+                       ctx.fillStyle = '#FFFFFF';
+                       ctx.fillRect(0, 0, canvas.width, canvas.height);
+                       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                       // Aggressive compression for optimization
+                       resolve(canvas.toDataURL('image/jpeg', 0.6));
+                  } else {
+                      resolve(base64);
+                  }
+              };
+              img.onerror = () => resolve(base64);
+          });
+      };
+
+      try {
+          // 1. Optimize Products
+          const totalProducts = products.length;
+          const optimizedProducts = [...products];
+          
+          for (let i = 0; i < totalProducts; i++) {
+              const p = optimizedProducts[i];
+              setProcessStatus(`Optimizing Product ${i+1}/${totalProducts}: ${p.sku}`);
+              setProgress(Math.round((i / totalProducts) * 50));
+              
+              const newImages = [];
+              for (const img of p.images) {
+                  // Max 1000px for products
+                  const res = await resizeBase64(img, 1000); 
+                  newImages.push(res);
+              }
+              p.images = newImages;
+              // Yield to UI
+              await new Promise(r => setTimeout(r, 10));
+          }
+
+          // 2. Optimize Theme Assets
+          setProcessStatus("Optimizing Theme Assets...");
+          setProgress(60);
+
+          const optHero = await resizeBase64(heroImage, 1200);
+          const optAboutCert = aboutCertsImage ? await resizeBase64(aboutCertsImage, 1000) : null;
+          
+          const optProdImgs = [];
+          for (const img of productionImages) optProdImgs.push(await resizeBase64(img, 1000));
+          
+          const optRohsImgs = [];
+          for (const img of rohsImages) optRohsImgs.push(await resizeBase64(img, 800)); // 800px enough for grid
+          
+          const optEquipImgs = [];
+          for (const img of equipmentImages) optEquipImgs.push(await resizeBase64(img, 800));
+
+          // 3. Save Everything
+          setProcessStatus("Saving Optimized Data...");
+          setProgress(90);
+
+          // Update Product Context
+          // Pass undefined as categories to avoid resetting them
+          await restoreProducts(optimizedProducts, categories); 
+
+          // Update Theme Context directly
+          setHeroImage(optHero);
+          if (optAboutCert) setAboutCertsImage(optAboutCert);
+          setProductionImages(optProdImgs);
+          setRohsImages(optRohsImgs);
+          setEquipmentImages(optEquipImgs);
+
+          setProcessStatus("Done!");
+          setProgress(100);
+          
+          await new Promise(r => setTimeout(r, 500));
+          setIsProcessing(false);
+          alert("Optimization Complete!\n\nYour data size has been significantly reduced.\nYou can now generate the 3 files and upload to GitHub with much higher success rate.");
+
+      } catch (e: any) {
+          console.error(e);
+          alert(`Optimization failed: ${e.message}`);
+          setIsProcessing(false);
+      }
+  };
+
+
   const handleHeroUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setProcessStatus('Compressing Banner...');
       setIsProcessing(true);
       try {
-        const base64 = await processImage(file, 1024, 0.4); 
+        const base64 = await processImage(file, 1024, 0.5); 
         setHeroImage(base64);
       } catch (error) {
         alert("Image upload failed.");
@@ -211,6 +330,13 @@ export const ThemeEditor: React.FC = () => {
         }
       }
   }
+  
+  const handleManualCertAdd = (key: string) => {
+      const val = manualInputs[key]?.trim();
+      if (!val) return;
+      addCertImage(key, "", val);
+      setManualInputs(prev => ({ ...prev, [key]: '' }));
+  }
 
   // --- NEW IMAGE HANDLERS ---
   const handleProductionUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -220,7 +346,7 @@ export const ThemeEditor: React.FC = () => {
           setIsProcessing(true);
           try {
               // Production lines currently stays as single image replacement for simplicity of the split view
-              const base64 = await processImage(files[0], 800, 0.3);
+              const base64 = await processImage(files[0], 800, 0.5);
               setProductionImages([base64]); 
           } finally {
               setIsProcessing(false);
@@ -235,7 +361,7 @@ export const ThemeEditor: React.FC = () => {
           setIsProcessing(true);
           try {
               const fileArray = Array.from(files);
-              const base64Promises = fileArray.map((file) => processImage(file as File, 800, 0.3));
+              const base64Promises = fileArray.map((file) => processImage(file as File, 800, 0.5));
               const newUrls = await Promise.all(base64Promises);
               // Append to existing array
               setRohsImages([...rohsImages, ...newUrls]); 
@@ -256,7 +382,7 @@ export const ThemeEditor: React.FC = () => {
         setIsProcessing(true);
         try {
           const fileArray = Array.from(files);
-          const base64Promises = fileArray.map((file) => processImage(file as File, 640, 0.3));
+          const base64Promises = fileArray.map((file) => processImage(file as File, 640, 0.5));
           const newUrls = await Promise.all(base64Promises);
           setEquipmentImages([...equipmentImages, ...newUrls]);
         } finally {
@@ -276,7 +402,7 @@ export const ThemeEditor: React.FC = () => {
           setProcessStatus('Compressing...');
           setIsProcessing(true);
           try {
-              const base64 = await processImage(file, 800, 0.3);
+              const base64 = await processImage(file, 800, 0.5);
               setAboutCertsImage(base64);
           } finally {
               setIsProcessing(false);
@@ -291,7 +417,8 @@ export const ThemeEditor: React.FC = () => {
       setIsProcessing(true);
       try {
         const fileArray = Array.from(files);
-        const base64Promises = fileArray.map((file) => processImage(file as File, 500, 0.3));
+        // UPDATED: Use 1000px and 0.6 quality - strict balance for Vercel
+        const base64Promises = fileArray.map((file) => processImage(file as File, 1000, 0.6));
         const newUrls = await Promise.all(base64Promises);
         setNewProdImages(prev => [...prev, ...newUrls]);
       } finally {
@@ -351,9 +478,7 @@ export const ThemeEditor: React.FC = () => {
       setNewCatName('');
   }
 
-  // ... (Export/Import/Reset logic same as before) ...
-
-  // --- STANDARD EXPORT FUNCTION ---
+  // --- STANDARD EXPORT FUNCTION (Backups still use single file for convenience) ---
   const handleExportData = () => {
     const newVersion = Date.now().toString();
     const backupData = {
@@ -385,6 +510,7 @@ export const ThemeEditor: React.FC = () => {
   };
 
   // --- OPTIMIZED IMPORT FUNCTION (Chunked Write) ---
+  // This imports the SINGLE backup file
   const handleImportData = (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (!file) return;
@@ -425,7 +551,7 @@ export const ThemeEditor: React.FC = () => {
                   try {
                       json = JSON.parse(content);
                   } catch (err) {
-                      // Legacy cleanup
+                       // Legacy cleanup...
                       let cleaned = content.replace(/^import\s+.*;\s*/gm, '')
                                            .replace(/export\s+const\s+INITIAL_DATA\s*=\s*/, '')
                                            .trim().replace(/;$/, '')
@@ -535,53 +661,88 @@ export const ThemeEditor: React.FC = () => {
       }
   }
 
-  // --- GITHUB JSON GENERATION ---
+  // --- GITHUB JSON SPLIT GENERATION ---
   const handleGenerateAndDownload = () => {
     setIsGenerating(true);
     
+    // Helper to download a file
+    const downloadBlob = (filename: string, content: string) => {
+        const blob = new Blob([content], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 100);
+        return blob.size / (1024 * 1024);
+    }
+
     setTimeout(() => {
         try {
-            const newVersion = Date.now().toString();
+            // CRITICAL OPTIMIZATION: Use strictly unified timestamp for all files
+            const commonVersion = Date.now().toString();
 
-            const fullData = {
-                version: newVersion,
+            // 1. DATA CORE (Small: Settings, Banner, Logo, Certs)
+            const coreData = {
+                version: commonVersion,
                 theme: {
                     heroImage,
                     logoImage,
-                    certImages,
-                    factoryImages, // Legacy
+                    certImages
+                }
+            };
+            
+            // 2. DATA ABOUT (Heavy: Factory, Lab, About Images)
+            const aboutData = {
+                version: commonVersion,
+                theme: {
+                    factoryImages, // Keep legacy
                     productionImages,
                     rohsImages,
                     equipmentImages,
                     aboutCertsImage
-                },
+                }
+            };
+
+            // 3. DATA PRODUCTS (Heavy: Products, Categories)
+            const productsData = {
+                version: commonVersion,
                 products,
                 categories
             };
-
-            const jsonString = JSON.stringify(fullData, null, 2);
-            const blob = new Blob([jsonString], { type: 'application/json' });
             
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'data.json';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            // Sequential Download with delays to allow browser to handle multiple files
+            // Increased delay to 1000ms to reduce likelihood of browser blocking
+            const sizeCore = downloadBlob('data_core.json', JSON.stringify(coreData, null, 2));
             
-            setTimeout(() => URL.revokeObjectURL(url), 100);
+            setTimeout(() => {
+                const sizeAbout = downloadBlob('data_about.json', JSON.stringify(aboutData, null, 2));
+                
+                setTimeout(() => {
+                    const sizeProd = downloadBlob('data_products.json', JSON.stringify(productsData, null, 2));
+                    
+                    setFileSizes({
+                        core: sizeCore,
+                        about: sizeAbout,
+                        products: sizeProd
+                    });
+                    setGenerationSuccess(true);
+                    setIsGenerating(false);
+                    
+                    // Alert user to check downloads
+                    alert("Download complete.\n\nNOTE: If you only see 1 file, your browser blocked multiple downloads. Please allow popups or download permissions for this site.");
 
-            setFileSizeMB(blob.size / (1024 * 1024));
-            setGenerationSuccess(true);
+                }, 1000);
+            }, 1000);
             
         } catch (e: any) {
             console.error(e);
-            alert(`Error generating file: ${e.message}\n\nTry removing some images.`);
-        } finally {
+            alert(`Error generating files: ${e.message}`);
             setIsGenerating(false);
         }
-    }, 100);
+    }, 500);
   }
 
   // ... (Clean Repo & Diags) ...
@@ -595,70 +756,62 @@ export const ThemeEditor: React.FC = () => {
   const getGithubUploadUrl = () => {
       if (!repoUrl) return '';
       const clean = cleanRepoUrl(repoUrl);
+      // DIRECT LINK TO PUBLIC FOLDER UPLOAD
       return `${clean}/upload/main/public`;
+  }
+
+  const checkSingleFile = async (filename: string) => {
+      const timestamp = Date.now();
+      const random = Math.random();
+      const targetUrl = `./${filename}?t=${timestamp}&r=${random}`;
+      
+      try {
+          const res = await fetch(targetUrl, { method: 'GET', cache: 'no-cache' });
+          if (!res.ok) {
+              return { size: 'N/A', version: 'Not Found', status: `HTTP ${res.status}`, url: targetUrl };
+          }
+          
+          const text = await res.text();
+          if (text.startsWith('version https://git-lfs')) {
+              return { size: '1KB (LFS)', version: 'GIT LFS ERROR', status: 'LFS Pointer detected', url: targetUrl };
+          }
+
+          const blobSize = new Blob([text]).size;
+          const sizeMB = (blobSize / (1024 * 1024)).toFixed(2);
+          
+          let ver = 'Unknown';
+          try {
+              const json = JSON.parse(text);
+              ver = json.version || 'No Ver';
+          } catch(e) {
+              ver = 'Invalid JSON';
+          }
+          
+          return { 
+              size: `${sizeMB} MB`, 
+              version: ver, 
+              status: blobSize < 50000 ? 'Small' : 'Good',
+              url: targetUrl 
+          };
+      } catch (e: any) {
+          return { size: 'Error', version: 'Error', status: e.message, url: targetUrl };
+      }
   }
 
   const checkServerStatus = async () => {
       setIsCheckingServer(true);
-      setServerStats(null);
-      try {
-          const timestamp = Date.now();
-          const random = Math.random();
-          const targetUrl = `./data.json?t=${timestamp}&r=${random}`;
-          
-          const res = await fetch(targetUrl, { 
-              method: 'GET',
-              cache: 'no-store'
-          });
-          
-          const finalUrl = res.url; 
-          
-          if (!res.ok) {
-              setServerStats({ 
-                  size: 'N/A', 
-                  version: 'Not Found', 
-                  status: `HTTP ${res.status}`,
-                  url: finalUrl
-              });
-              return;
-          }
+      setServerStats({});
+      
+      const core = await checkSingleFile('data_core.json');
+      setServerStats(prev => ({ ...prev, core }));
+      
+      const about = await checkSingleFile('data_about.json');
+      setServerStats(prev => ({ ...prev, about }));
 
-          const contentType = res.headers.get("content-type");
-          if (contentType && contentType.indexOf("application/json") === -1) {
-              setServerStats({
-                  size: 'N/A',
-                  version: 'Invalid Type',
-                  status: `Server returned ${contentType} (likely 404 HTML)`,
-                  url: finalUrl
-              });
-              return;
-          }
+      const prod = await checkSingleFile('data_products.json');
+      setServerStats(prev => ({ ...prev, prod }));
 
-          const blob = await res.blob();
-          const sizeBytes = blob.size;
-          const sizeMB = (sizeBytes / (1024 * 1024)).toFixed(2);
-          
-          const text = await blob.text();
-          let ver = 'Unknown';
-          try {
-              const json = JSON.parse(text);
-              ver = json.version || 'No Version Tag';
-          } catch(e) {
-              ver = 'Invalid JSON';
-          }
-
-          setServerStats({ 
-              size: `${sizeMB} MB`, 
-              version: ver,
-              status: sizeBytes < 50000 ? 'Warning: File is very small' : 'Good Size',
-              url: finalUrl
-          });
-
-      } catch (e: any) {
-          setServerStats({ size: 'Error', version: 'Error', status: e.message, url: 'Failed' });
-      } finally {
-          setIsCheckingServer(false);
-      }
+      setIsCheckingServer(false);
   }
 
   const getDiagnostics = () => {
@@ -681,15 +834,24 @@ export const ThemeEditor: React.FC = () => {
                           {isCheckingServer ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
                       </button>
                   </div>
-                  {serverStats ? (
-                      <div className="space-y-1">
-                          <div className="flex justify-between"><span>Real Size:</span> <span className={serverStats.size.includes('0.0') ? 'text-red-500 font-bold' : 'text-green-600 font-bold'}>{serverStats.size}</span></div>
-                          <div className="flex justify-between"><span>Real Ver:</span> <span>{serverStats.version}</span></div>
-                          <div className="break-all text-[9px] text-gray-400 mt-1 border-t pt-1">Fetched: {serverStats.url}</div>
-                          <div className="text-[9px] text-amber-600 mt-1 font-bold">{serverStats.status}</div>
-                      </div>
-                  ) : (
-                      <div className="text-[9px] text-gray-400 italic">Click refresh to inspect actual server file...</div>
+                  
+                  {['core', 'about', 'prod'].map(key => {
+                      const stats = serverStats[key];
+                      const name = key === 'core' ? 'Core' : key === 'about' ? 'About' : 'Products';
+                      const filename = key === 'core' ? 'data_core.json' : key === 'about' ? 'data_about.json' : 'data_products.json';
+                      
+                      if (!stats) return <div key={key} className="text-[9px] text-gray-400 italic border-t pt-1 mt-1">{filename}: Waiting...</div>
+
+                      return (
+                          <div key={key} className="border-t pt-1 mt-1">
+                              <div className="flex justify-between font-bold text-gray-700"><span>{filename}</span> <span>{stats.size}</span></div>
+                              <div className="flex justify-between text-[9px]"><span>Ver: {stats.version}</span> <span className={stats.version === 'GIT LFS ERROR' ? 'text-red-600 font-bold' : 'text-green-600'}>{stats.status}</span></div>
+                          </div>
+                      )
+                  })}
+
+                  {Object.keys(serverStats).length === 0 && (
+                       <div className="text-[9px] text-gray-400 italic">Click refresh to inspect server files...</div>
                   )}
               </div>
 
@@ -740,7 +902,7 @@ export const ThemeEditor: React.FC = () => {
             <div className="bg-gray-50 border-b border-gray-200">
               <div className="flex justify-between items-center p-4 pb-2">
                   <h3 className="font-bold text-gray-900">Live Editor</h3>
-                  <span className="text-[10px] uppercase tracking-wider bg-green-100 text-green-800 px-2 py-0.5 rounded-full font-bold">Ultra Compress: ACTIVE</span>
+                  <span className="text-[10px] uppercase tracking-wider bg-green-100 text-green-800 px-2 py-0.5 rounded-full font-bold">Split Mode</span>
               </div>
               <div className="flex px-4 gap-4 overflow-x-auto">
                 <button onClick={() => setActiveTab('visual')} className={`pb-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${activeTab === 'visual' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Visuals</button>
@@ -770,8 +932,35 @@ export const ThemeEditor: React.FC = () => {
                           {!repoUrl && <p className="text-[10px] text-amber-600">Please enter repo URL to enable direct links.</p>}
                       </div>
 
-                      <div className="bg-gray-50 p-3 rounded border">
-                          <h4 className="font-bold text-xs mb-2">Step 1: Get Data</h4>
+                      {/* NEW: MIGRATION HELPER */}
+                      <div className="bg-blue-50 p-3 rounded border border-blue-200 mb-4">
+                          <div className="flex items-center mb-2">
+                             <Split className="w-4 h-4 text-primary mr-2" />
+                             <h4 className="font-bold text-xs text-gray-900">V1 to V2 Migration</h4>
+                          </div>
+                          <p className="text-[10px] text-gray-600 mb-2 leading-snug">
+                            If you have an old, large <code>data.json</code> backup, import it here. The system will automatically prepare it for the new 3-file format.
+                          </p>
+                          <div className="relative">
+                            <input type="file" accept=".json,.ts" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onChange={handleImportData} disabled={isProcessing} />
+                            <Button variant="white" className="w-full !py-2 text-xs border-blue-200 text-blue-700">
+                                Import Old Large Backup
+                            </Button>
+                          </div>
+                      </div>
+                      
+                      <div className="border-t my-4 border-gray-200"></div>
+
+                      {/* Step 1 */}
+                      <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                          <div className="flex items-center mb-2">
+                             <div className="bg-primary text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold mr-2">1</div>
+                             <h4 className="font-bold text-xs text-gray-900">Generate & Download (3 Files)</h4>
+                          </div>
+                          <p className="text-[10px] text-gray-500 mb-2 leading-snug">
+                            This will download <strong>3 separate files</strong> based on your current local data. <br/>
+                            <span className="text-amber-600 font-bold">Please allow multiple file downloads if prompted.</span>
+                          </p>
                           <Button 
                             variant="primary" 
                             className="w-full !py-2 flex items-center justify-center text-xs" 
@@ -781,28 +970,45 @@ export const ThemeEditor: React.FC = () => {
                               {isGenerating ? (
                                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating...</>
                               ) : generationSuccess ? (
-                                  <><CheckCircle2 className="w-4 h-4 mr-2" /> Download Again ({fileSizeMB.toFixed(1)} MB)</>
+                                  <><CheckCircle2 className="w-4 h-4 mr-2" /> Download Again</>
                               ) : (
-                                  <><Download className="w-4 h-4 mr-2" /> Download data.json</>
+                                  <><Layers className="w-4 h-4 mr-2" /> Download 3 Files</>
                               )}
                           </Button>
+                          {generationSuccess && (
+                              <div className="mt-2 space-y-1">
+                                  <div className="flex justify-between text-[9px] text-gray-600"><span>data_core.json</span> <span>{fileSizes.core.toFixed(2)} MB</span></div>
+                                  <div className="flex justify-between text-[9px] text-gray-600"><span>data_about.json</span> <span>{fileSizes.about.toFixed(2)} MB</span></div>
+                                  <div className="flex justify-between text-[9px] text-gray-600"><span>data_products.json</span> <span>{fileSizes.products.toFixed(2)} MB</span></div>
+                                  
+                                  {(fileSizes.core > 20 || fileSizes.about > 20 || fileSizes.products > 20) && (
+                                     <div className="mt-1 text-[9px] text-red-600 font-bold flex items-center bg-red-50 p-1.5 rounded border border-red-200">
+                                          <AlertTriangle className="w-3 h-3 mr-1" />
+                                          Warning: One file is still > 20MB.
+                                     </div>
+                                  )}
+                              </div>
+                          )}
                       </div>
 
-                      <div className="flex justify-center">
-                          <ArrowRight className="text-gray-300" />
-                      </div>
-
-                      <div className="bg-gray-50 p-3 rounded border">
-                           <h4 className="font-bold text-xs mb-2">Step 2: Upload to GitHub</h4>
+                      {/* Step 2 */}
+                      <div className={`p-3 rounded border transition-colors ${generationSuccess ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200 opacity-60'}`}>
+                           <div className="flex items-center mb-2">
+                             <div className="bg-primary text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold mr-2">2</div>
+                             <h4 className="font-bold text-xs text-gray-900">Upload ALL 3 Files</h4>
+                          </div>
+                          <p className="text-[10px] text-gray-600 mb-2 leading-snug">
+                             Drag <strong>ALL 3 files</strong> you just downloaded into the GitHub <strong>public</strong> folder upload page.
+                          </p>
                            {repoUrl ? (
                               <a 
                                 href={getGithubUploadUrl()} 
                                 target="_blank" 
                                 rel="noreferrer"
-                                className="w-full"
+                                className={`w-full block ${!generationSuccess ? 'pointer-events-none' : ''}`}
                               >
-                                  <Button variant="secondary" className="w-full !py-2 text-xs">
-                                      <ExternalLink className="w-4 h-4 mr-2" /> Open 'public' Upload Page
+                                  <Button variant="secondary" className="w-full !py-2 text-xs" disabled={!generationSuccess}>
+                                      <ExternalLink className="w-4 h-4 mr-2" /> Open Upload Page
                                   </Button>
                               </a>
                            ) : (
@@ -812,9 +1018,21 @@ export const ThemeEditor: React.FC = () => {
                            )}
                       </div>
 
+                      {/* Step 3 */}
+                      <div className="bg-amber-50 p-3 rounded border border-amber-200">
+                          <div className="flex items-center mb-2">
+                             <div className="bg-amber-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold mr-2">3</div>
+                             <h4 className="font-bold text-xs text-amber-900">Commit Changes</h4>
+                          </div>
+                          <p className="text-[10px] text-amber-800 leading-snug">
+                            Vercel will only update when you <strong>Commit changes</strong> on GitHub. <br/>
+                            <span className="font-bold">If you skip this, Vercel will show old/empty data.</span>
+                          </p>
+                      </div>
+
                       {/* DIAGNOSTICS */}
                       <div className="border-t pt-4">
-                           <h4 className="font-bold text-xs mb-2">Diagnostics</h4>
+                           <h4 className="font-bold text-xs mb-2">Deploy Diagnostics</h4>
                            {getDiagnostics()}
                            <Button 
                              onClick={handleHardReset}
@@ -829,6 +1047,7 @@ export const ThemeEditor: React.FC = () => {
               {/* --- VISUAL TAB --- */}
               {activeTab === 'visual' && (
                 <div className="space-y-6">
+                  {/* ... existing visual tab content ... */}
                   <div>
                     <label className="text-sm font-medium text-gray-700 mb-2 flex items-center">Brand Logo</label>
                     <div className="flex items-center gap-4 mb-2">
@@ -854,11 +1073,14 @@ export const ThemeEditor: React.FC = () => {
                 </div>
               )}
 
+              {/* ... existing Certs, About, Product, Manage tabs ... */}
               {/* --- CERTS TAB --- */}
               {activeTab === 'certs' && (
                   <div className="space-y-4">
                       {certSlots.map(slot => {
                               const currentCerts = certImages[slot.key] || [];
+                              const isChina = slot.key === 'china';
+
                               return (
                                   <div key={slot.key} className="border rounded p-3 bg-gray-50">
                                       <div className="flex justify-between items-center mb-2">
@@ -875,10 +1097,44 @@ export const ThemeEditor: React.FC = () => {
                                               ))}
                                           </div>
                                       )}
-                                      <div className="relative">
-                                          <input type="file" accept=".pdf" multiple className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={(e) => handleCertUpload(slot.key, e)} disabled={isProcessing} />
-                                          <Button variant="white" className="w-full !py-1.5 !text-xs border-gray-300 flex items-center justify-center"><Plus className="w-3 h-3 mr-1" /> Add PDF(s)</Button>
-                                      </div>
+                                      
+                                      {/* Strict Separation: China = Text Only, Others = File Only (Batch) */}
+                                      {isChina ? (
+                                          <div className="relative">
+                                              <p className="text-[9px] text-gray-500 mb-1">Enter Certificate Name (Text Only):</p>
+                                              <div className="flex gap-1">
+                                                  <input 
+                                                      type="text" 
+                                                      placeholder="e.g. CCC Certificate 2024" 
+                                                      className="flex-1 border rounded p-1.5 text-xs"
+                                                      value={manualInputs[slot.key] || ''}
+                                                      onChange={(e) => setManualInputs({...manualInputs, [slot.key]: e.target.value})}
+                                                  />
+                                                  <Button 
+                                                      variant="secondary" 
+                                                      className="!py-1.5 !px-3 !text-xs"
+                                                      onClick={() => handleManualCertAdd(slot.key)}
+                                                      disabled={!manualInputs[slot.key]}
+                                                  >
+                                                      Add
+                                                  </Button>
+                                              </div>
+                                          </div>
+                                      ) : (
+                                          <div className="relative">
+                                              <input 
+                                                  type="file" 
+                                                  accept=".pdf" 
+                                                  multiple 
+                                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+                                                  onChange={(e) => handleCertUpload(slot.key, e)} 
+                                                  disabled={isProcessing} 
+                                              />
+                                              <Button variant="white" className="w-full !py-1.5 !text-xs border-gray-300 flex items-center justify-center">
+                                                  <Plus className="w-3 h-3 mr-1" /> Add PDF(s) (Batch)
+                                              </Button>
+                                          </div>
+                                      )}
                                   </div>
                               );
                           })}
@@ -1008,6 +1264,25 @@ export const ThemeEditor: React.FC = () => {
                         </div>
                     </div>
                   </div>
+
+                  {/* NEW OPTIMIZATION TOOL */}
+                  <div className="bg-green-50 border border-green-200 rounded p-4">
+                      <h4 className="text-sm font-bold text-gray-900 mb-2 flex items-center">
+                          <Zap className="w-4 h-4 mr-2 text-green-600" /> Smart Optimization
+                      </h4>
+                      <p className="text-[10px] text-gray-600 mb-3">
+                          If Vercel or GitHub rejects your files, use this to automatically compress all images (Products, Factory, etc) to a safe size for web deployment.
+                      </p>
+                      <Button 
+                          variant="white" 
+                          className="w-full !py-2 text-xs border-green-200 text-green-700 hover:bg-green-100"
+                          onClick={handleSmartOptimization}
+                          disabled={isProcessing}
+                      >
+                          <Zap className="w-3 h-3 mr-2" /> Optimize All Images & Save
+                      </Button>
+                  </div>
+
                   <div>
                     <h4 className="text-sm font-bold text-gray-900 mb-2 flex items-center"><List className="w-4 h-4 mr-2" /> Categories</h4>
                     <div className="flex gap-2 mb-3">

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, FileText } from 'lucide-react';
+import { Download, FileText, Info } from 'lucide-react';
 import { Language } from '../types';
 import { TRANSLATIONS } from '../constants';
 import { useTheme } from '../context/ThemeContext';
@@ -53,6 +53,7 @@ export const Certifications: React.FC<CertProps> = ({ lang }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
            {certGroups.map((group, idx) => {
              const certs = certImages[group.key] || [];
+             const isChina = group.key === 'china';
              return (
                <div key={idx} className="bg-neutral-50 rounded-xl p-8 border border-neutral-100 hover:shadow-md transition-shadow flex flex-col h-full">
                  <h3 className="text-xl font-bold text-primary mb-4 border-b border-gray-200 pb-2">
@@ -66,31 +67,47 @@ export const Certifications: React.FC<CertProps> = ({ lang }) => {
                    ))}
                  </div>
                  
-                 {/* Certificate PDF Download */}
-                 {/* Changed mt-auto to mt-6 to align items from the top instead of pushing them to the bottom */}
+                 {/* Certificate List */}
                  <div className="mt-6 space-y-3">
                    {certs.length > 0 ? (
-                       certs.map((cert, i) => (
-                           <a 
-                             key={i}
-                             href={cert.url} 
-                             download={cert.name}
-                             className="w-full flex items-center justify-between p-4 bg-white border border-blue-100 rounded-lg hover:bg-blue-50 transition-colors group cursor-pointer"
-                           >
-                              <div className="flex items-center overflow-hidden">
-                                  <FileText className="w-6 h-6 text-red-500 mr-3 flex-shrink-0" />
-                                  <div className="text-left overflow-hidden">
-                                      <span className="text-sm font-bold text-gray-900 block truncate max-w-[180px]" title={cert.name}>
-                                          {cert.name}
-                                      </span>
-                                      <span className="text-xs text-gray-400 block">
-                                          {lang === 'en' ? 'Click to Download' : '点击下载'}
-                                      </span>
-                                  </div>
-                              </div>
-                              <Download className="w-4 h-4 text-primary flex-shrink-0" />
-                           </a>
-                       ))
+                       certs.map((cert, i) => {
+                           // If URL is present, it's a file download. If not, it's a text-only record (like CCC request).
+                           if (cert.url) {
+                               return (
+                                   <a 
+                                     key={i}
+                                     href={cert.url} 
+                                     download={cert.name}
+                                     className="w-full flex items-center justify-between p-4 bg-white border border-blue-100 rounded-lg hover:bg-blue-50 transition-colors group cursor-pointer"
+                                   >
+                                      <div className="flex items-center overflow-hidden">
+                                          <FileText className="w-6 h-6 text-red-500 mr-3 flex-shrink-0" />
+                                          <div className="text-left overflow-hidden">
+                                              <span className="text-sm font-bold text-gray-900 block truncate max-w-[180px]" title={cert.name}>
+                                                  {cert.name}
+                                              </span>
+                                              <span className="text-xs text-gray-400 block">
+                                                  {lang === 'en' ? 'Click to Download' : '点击下载'}
+                                              </span>
+                                          </div>
+                                      </div>
+                                      <Download className="w-4 h-4 text-primary flex-shrink-0" />
+                                   </a>
+                               );
+                           } else {
+                               return (
+                                   <div key={i} className="w-full flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg">
+                                       <div className="flex items-center">
+                                            <FileText className="w-6 h-6 text-gray-400 mr-3 flex-shrink-0" />
+                                            <span className="text-sm font-bold text-gray-700">{cert.name}</span>
+                                       </div>
+                                       <span className="text-[10px] text-gray-400 border border-gray-200 px-2 py-0.5 rounded bg-gray-50">
+                                           {lang === 'en' ? 'Listed' : '已列名'}
+                                       </span>
+                                   </div>
+                               );
+                           }
+                       })
                    ) : (
                        <div className="w-full bg-white rounded border border-dashed border-gray-300 flex items-center justify-center text-gray-400 text-sm flex-col p-6 text-center h-24">
                            <span className="font-medium mb-1">{lang === 'en' ? "No Certificate" : "暂无证书"}</span>
@@ -98,6 +115,18 @@ export const Certifications: React.FC<CertProps> = ({ lang }) => {
                        </div>
                    )}
                  </div>
+
+                 {/* Special Footer for China CCC */}
+                 {isChina && (
+                     <div className="mt-4 p-3 bg-yellow-50 border border-yellow-100 rounded text-xs text-yellow-800 flex items-start leading-snug">
+                        <Info className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
+                        <div>
+                            {lang === 'en' 
+                                ? "Please contact us for a copy of the CCC certificate." 
+                                : "如需要CCC证书复印件请联系我们。"}
+                        </div>
+                     </div>
+                 )}
                </div>
              );
            })}

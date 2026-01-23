@@ -114,35 +114,49 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
         const savedVersion = await dbGet('glam_p_version');
         const dbVersion = String(savedVersion || '0');
         
-        let fetchedData = null;
+        let fetchedData: any = null;
         let fetchedVersion = '';
 
         try {
-            // FIX: Added cache: 'no-store' to force bypass of browser cache
-            const res = await fetch('./data.json?t=' + Date.now(), { cache: 'no-store' }); 
+            // OPTIMIZATION: Fetch specific products file
+            const res = await fetch('./data_products.json?t=' + Date.now(), { cache: 'no-cache' }); 
             
             if (res.ok) {
                  const contentType = res.headers.get("content-type");
                  if (contentType && contentType.indexOf("application/json") === -1) {
-                     console.warn("[ProductContext] Server returned HTML instead of JSON. Likely 404 on subpath.");
+                     console.warn("[ProductContext] Server returned HTML instead of JSON.");
                      throw new Error("Invalid Content-Type");
                  }
                  
+                const text = await res.text();
+                if (text.startsWith('version https://git-lfs')) {
+                     console.error("CRITICAL: Git LFS Pointer detected.");
+                     throw new Error("Git LFS Pointer detected");
+                }
+
                 try {
-                    fetchedData = await res.json();
+                    fetchedData = JSON.parse(text);
                     fetchedVersion = String(fetchedData?.version || '');
-                    console.log(`[ProductContext] Remote data.json found. Version: ${fetchedVersion} | Local Version: ${dbVersion}`);
+                    console.log(`[ProductContext] Remote data_products.json found. Version: ${fetchedVersion} | Local: ${dbVersion}`);
                 } catch (jsonErr) {
-                    console.warn("[ProductContext] data.json fetched but failed to parse JSON.", jsonErr);
                     fetchedData = null;
                 }
-            } else if (res.status === 404) {
-                console.info("[ProductContext] No ./data.json found (404). Expected for fresh installs.");
             } else {
-                console.warn(`[ProductContext] fetch ./data.json failed with status: ${res.status}`);
+                 // Fallback to legacy data.json
+                 const legacyRes = await fetch('./data.json?t=' + Date.now(), { cache: 'no-cache' });
+                 if(legacyRes.ok) {
+                     const text = await legacyRes.text();
+                     try {
+                        const json = JSON.parse(text);
+                        // Legacy structure has products at root or inside content
+                        fetchedData = json;
+                        fetchedVersion = String(json.version || '');
+                        console.log("Using legacy data.json for products");
+                     } catch(e) {}
+                 }
             }
         } catch (err) {
-            console.warn("[ProductContext] Network error fetching data.json", err);
+            console.warn("[ProductContext] Network error fetching product data", err);
         }
 
         const isLocalBackup = dbVersion.length > 10 && /^\d+$/.test(dbVersion);
@@ -162,9 +176,12 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
         if (shouldOverwrite) {
             console.log(`>>> Product Update Triggered: Remote (${fetchedVersion}) != Local (${dbVersion}). Overwriting local DB.`);
             
-            const rawProducts = Array.isArray(fetchedData.products) ? fetchedData.products : [];
+            // Handle both legacy (root.products) and new format
+            const rawProducts = Array.isArray(fetchedData.products) ? fetchedData.products : (fetchedData.content?.products || []);
+            const rawCategories = Array.isArray(fetchedData.categories) ? fetchedData.categories : (fetchedData.content?.categories || []);
+
             const newProducts = rawProducts.map(sanitizeProduct);
-            const newCategories = sanitizeCategories(fetchedData.categories);
+            const newCategories = sanitizeCategories(rawCategories);
 
             await dbDelete('glam_products');
             await dbDelete('glam_p_meta');

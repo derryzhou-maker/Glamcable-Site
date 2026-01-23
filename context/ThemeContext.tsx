@@ -114,33 +114,61 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const dbVersion = String(savedVersion || '0');
         setLocalVersion(dbVersion);
         
-        let fetchedData = null;
+        let fetchedDataCore: any = null;
+        let fetchedDataAbout: any = null;
         let fetchedVersion = '';
 
         try {
-            const res = await fetch('./data.json?t=' + Date.now() + '&r=' + Math.random(), { cache: 'no-store' }); 
+            // OPTIMIZATION: Fetch separate files in parallel
+            // If data_about (large images) fails, we still want to load core settings
+            const [coreRes, aboutRes] = await Promise.allSettled([
+                fetch('./data_core.json?t=' + Date.now(), { cache: 'no-cache' }),
+                fetch('./data_about.json?t=' + Date.now(), { cache: 'no-cache' })
+            ]);
             
-            if (res.ok) {
-                const contentType = res.headers.get("content-type");
-                if (contentType && contentType.indexOf("application/json") === -1) {
-                    console.warn("[ThemeContext] Server returned HTML instead of JSON. Likely 404 on subpath.");
-                    throw new Error("Invalid Content-Type");
-                }
-
-                try {
-                    fetchedData = await res.json();
-                    fetchedVersion = String(fetchedData?.version || '');
-                    setRemoteVersion(fetchedVersion);
-                    console.log(`[ThemeContext] Remote data.json found. Version: ${fetchedVersion} | Local: ${dbVersion}`);
-                } catch (jsonErr) {
-                    console.warn("[ThemeContext] fetch success but JSON parse failed.", jsonErr);
-                    fetchedData = null;
-                }
+            // Process Core Data (Settings, Hero, Logo, Certs)
+            if (coreRes.status === 'fulfilled' && coreRes.value.ok) {
+                 const text = await coreRes.value.text();
+                 if (!text.startsWith('version https://git-lfs')) {
+                    try {
+                        fetchedDataCore = JSON.parse(text);
+                        // Core version dictates the main version
+                        fetchedVersion = String(fetchedDataCore?.version || '');
+                        setRemoteVersion(fetchedVersion);
+                        console.log(`[ThemeContext] Remote data_core.json found. Version: ${fetchedVersion}`);
+                    } catch (e) { console.warn("Failed parsing data_core.json", e); }
+                 }
             } else {
-                console.warn(`[ThemeContext] data.json error (status ${res.status}). Using local data.`);
+                 console.warn("[ThemeContext] data_core.json missing or failed. Trying legacy data.json...");
+                 // Try legacy data.json if core missing (backward compatibility)
+                 const legacyRes = await fetch('./data.json?t=' + Date.now(), { cache: 'no-cache' });
+                 if(legacyRes.ok) {
+                     const text = await legacyRes.text();
+                     try {
+                         const json = JSON.parse(text);
+                         fetchedDataCore = json;
+                         fetchedDataAbout = json; // Legacy has everything in one
+                         fetchedVersion = String(json.version || '');
+                         console.log("Using legacy data.json");
+                     } catch(e) {}
+                 }
             }
+
+            // Process About Data (Factory images etc)
+            // It is OPTIONAL. If it fails (e.g. 404 or network timeout), we proceed with null.
+            if (aboutRes.status === 'fulfilled' && aboutRes.value.ok) {
+                const text = await aboutRes.value.text();
+                 if (!text.startsWith('version https://git-lfs')) {
+                    try {
+                        fetchedDataAbout = JSON.parse(text);
+                    } catch (e) { console.warn("Failed parsing data_about.json", e); }
+                 }
+            } else {
+                 console.warn("[ThemeContext] data_about.json failed to load. Skipping large image assets.");
+            }
+
         } catch (err) {
-            console.warn("[ThemeContext] Failed to fetch data.json", err);
+            console.warn("[ThemeContext] Failed to fetch data files", err);
         }
 
         const isLocalBackup = dbVersion.length > 10 && /^\d+$/.test(dbVersion);
@@ -148,7 +176,8 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         
         let shouldOverwrite = false;
 
-        if (fetchedData && fetchedData.theme && fetchedVersion && fetchedVersion !== dbVersion) {
+        // Compare versions
+        if (fetchedVersion && fetchedVersion !== dbVersion) {
              if (!isLocalBackup) {
                  shouldOverwrite = true;
              } else if (isRemoteBackup && Number(fetchedVersion) > Number(dbVersion)) {
@@ -159,20 +188,23 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
              }
         }
 
-        if (shouldOverwrite && fetchedData) {
+        if (shouldOverwrite) {
             console.log(">>> Theme Update Triggered: Remote Version != Local Version. Overwriting.");
             
-            const theme = fetchedData.theme;
-            const safeHero = theme.heroImage || INITIAL_DATA.theme.heroImage;
-            const safeLogo = theme.logoImage || null;
-            const safeCerts = theme.certImages || {}; 
-            const safeFactory = Array.isArray(theme.factoryImages) ? theme.factoryImages : [];
-            
-            const safeProd = Array.isArray(theme.productionImages) ? theme.productionImages : INITIAL_DATA.theme.productionImages;
-            const safeRohs = Array.isArray(theme.rohsImages) ? theme.rohsImages : INITIAL_DATA.theme.rohsImages;
-            const safeEquip = Array.isArray(theme.equipmentImages) ? theme.equipmentImages : INITIAL_DATA.theme.equipmentImages;
+            // Merge Data from Core and About
+            // Use fallback empty objects if fetches failed
+            const themeCore = fetchedDataCore?.theme || {};
+            const themeAbout = fetchedDataAbout?.theme || {};
 
-            const safeAbout = theme.aboutCertsImage || null;
+            const safeHero = themeCore.heroImage || INITIAL_DATA.theme.heroImage;
+            const safeLogo = themeCore.logoImage || null;
+            const safeCerts = themeCore.certImages || {}; 
+            
+            const safeFactory = Array.isArray(themeAbout.factoryImages) ? themeAbout.factoryImages : [];
+            const safeProd = Array.isArray(themeAbout.productionImages) ? themeAbout.productionImages : INITIAL_DATA.theme.productionImages;
+            const safeRohs = Array.isArray(themeAbout.rohsImages) ? themeAbout.rohsImages : INITIAL_DATA.theme.rohsImages;
+            const safeEquip = Array.isArray(themeAbout.equipmentImages) ? themeAbout.equipmentImages : INITIAL_DATA.theme.equipmentImages;
+            const safeAbout = themeAbout.aboutCertsImage || null;
 
             await dbSetMany([
                 { key: 'glam_data_version', value: fetchedVersion },
