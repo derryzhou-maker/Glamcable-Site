@@ -117,9 +117,22 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
         let fetchedData: any = null;
         let fetchedVersion = '';
 
+        // Strict Anti-Caching Fetch Config for BOTH Desktop and Mobile
+        const fetchConfig: RequestInit = {
+             cache: 'no-store',
+             headers: {
+                 'Pragma': 'no-cache',
+                 'Cache-Control': 'no-cache, no-store, must-revalidate'
+             }
+        };
+
+        const ts = Date.now();
+        // Aggressive random number to bust ISP/Browser/PC caches
+        const rnd = Math.floor(Math.random() * 1000000); 
+
         try {
-            // OPTIMIZATION: Fetch specific products file
-            const res = await fetch('./data_products.json?t=' + Date.now(), { cache: 'no-cache' }); 
+            // OPTIMIZATION: Fetch specific products file with random string
+            const res = await fetch(`./data_products.json?t=${ts}&r=${rnd}`, fetchConfig); 
             
             if (res.ok) {
                  const contentType = res.headers.get("content-type");
@@ -143,7 +156,7 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
                 }
             } else {
                  // Fallback to legacy data.json
-                 const legacyRes = await fetch('./data.json?t=' + Date.now(), { cache: 'no-cache' });
+                 const legacyRes = await fetch(`./data.json?t=${ts}&r=${rnd}`, fetchConfig);
                  if(legacyRes.ok) {
                      const text = await legacyRes.text();
                      try {

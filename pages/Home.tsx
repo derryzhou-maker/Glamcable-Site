@@ -21,6 +21,8 @@ export const Home: React.FC<HomeProps> = ({ lang, navigate, onViewDetail, onInqu
   // Show first 3 products
   const featuredProducts = products.slice(0, 3);
 
+  const hasHeroImage = !!heroImage && heroImage.length > 0;
+
   const advantages = [
     { icon: Award, titleEn: "Global Certifications", titleZh: "全球安规认证", descEn: "UL, VDE, CCC, PSE, KC, SAA", descZh: "UL, VDE, CCC, PSE, KC, SAA" },
     { icon: Settings, titleEn: "Custom Solutions", titleZh: "定制化方案", descEn: "Tailored specs for voltage & length", descZh: "按需定制电压、配线及长度" },
@@ -31,31 +33,42 @@ export const Home: React.FC<HomeProps> = ({ lang, navigate, onViewDetail, onInqu
   return (
     <div className="flex flex-col">
       {/* Hero Section */}
-      <section className="relative h-[600px] flex items-center justify-center bg-gray-900">
+      <section className="relative h-[600px] flex items-center justify-center bg-white">
         {/* Background Image Container */}
-        <div className="absolute inset-0 z-0 overflow-hidden bg-gray-800">
-          <img 
-            src={heroImage}
-            alt="Xinruitai Factory" 
-            className="w-full h-full object-cover transition-opacity duration-500"
-          />
-          {/* Dark Overlay for Text Readability */}
-          <div className="absolute inset-0 bg-black/60"></div>
+        <div className="absolute inset-0 z-0 overflow-hidden">
+          {hasHeroImage ? (
+            <>
+              <img 
+                src={heroImage}
+                alt="Xinruitai Factory" 
+                className="w-full h-full object-cover transition-opacity duration-500"
+              />
+              {/* Light Overlay (White/30%) - Preserves pale yellow brightness while helping text readability */}
+              <div className="absolute inset-0 bg-white/30"></div>
+            </>
+          ) : (
+            <div className="w-full h-full bg-white" />
+          )}
         </div>
 
         {/* Hero Content */}
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-white">
+        {/* Text is forced to Dark (Gray-900/Black) to contrast with Pale Yellow background */}
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-gray-900">
           <h1 className="text-4xl md:text-6xl font-bold mb-6 tracking-tight">
             Glam<span className="text-secondary">Cable</span>
           </h1>
-          <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto font-light leading-relaxed">
+          
+          {/* Slogan: Pure Black + Font Medium for Maximum Contrast against Yellow */}
+          <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto font-medium leading-relaxed text-black drop-shadow-sm">
             {TRANSLATIONS.brandSlogan[lang]}
           </p>
+
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Button variant="secondary" onClick={() => navigate('products')}>
+            {/* Buttons: Blue (Primary) contrasts excellently with Yellow */}
+            <Button variant="primary" onClick={() => navigate('products')}>
               {TRANSLATIONS.viewProducts[lang]}
             </Button>
-            <Button variant="white" onClick={() => navigate('contact')}>
+            <Button variant="outline" onClick={() => navigate('contact')}>
               {TRANSLATIONS.getQuote[lang]}
             </Button>
           </div>

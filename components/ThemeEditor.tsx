@@ -431,8 +431,6 @@ export const ThemeEditor: React.FC = () => {
     setNewProdImages(prev => prev.filter((_, i) => i !== index));
   }
 
-  // ... (Rest of existing handlers) ...
-
   const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
       const selectedCatName = e.target.value;
       setNewProdCategory(selectedCatName);
@@ -510,7 +508,6 @@ export const ThemeEditor: React.FC = () => {
   };
 
   // --- OPTIMIZED IMPORT FUNCTION (Chunked Write) ---
-  // This imports the SINGLE backup file
   const handleImportData = (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (!file) return;
@@ -551,7 +548,6 @@ export const ThemeEditor: React.FC = () => {
                   try {
                       json = JSON.parse(content);
                   } catch (err) {
-                       // Legacy cleanup...
                       let cleaned = content.replace(/^import\s+.*;\s*/gm, '')
                                            .replace(/export\s+const\s+INITIAL_DATA\s*=\s*/, '')
                                            .trim().replace(/;$/, '')
@@ -581,7 +577,6 @@ export const ThemeEditor: React.FC = () => {
                   }
 
                   if (window.confirm(`Found ${productsData.length} products. Restore now? (This may take a moment)`)) {
-                      
                       setProcessStatus('Preparing Database...');
                       
                       const ops: {key: string, value: any}[] = [];
@@ -593,7 +588,6 @@ export const ThemeEditor: React.FC = () => {
                       if (themeData.logoImage) ops.push({ key: 'glam_logo_image', value: themeData.logoImage });
                       if (themeData.certImages) ops.push({ key: 'glam_cert_images', value: themeData.certImages });
                       
-                      // Restore all new fields
                       if (themeData.factoryImages) ops.push({ key: 'glam_factory_images', value: themeData.factoryImages });
                       if (themeData.productionImages) ops.push({ key: 'glam_prod_images', value: themeData.productionImages });
                       if (themeData.rohsImages) ops.push({ key: 'glam_rohs_images', value: themeData.rohsImages });
@@ -631,7 +625,6 @@ export const ThemeEditor: React.FC = () => {
                       } else {
                           throw new Error("Verification failed. Please retry.");
                       }
-
                   } else {
                       setIsProcessing(false);
                   }
@@ -661,11 +654,9 @@ export const ThemeEditor: React.FC = () => {
       }
   }
 
-  // --- GITHUB JSON SPLIT GENERATION ---
   const handleGenerateAndDownload = () => {
     setIsGenerating(true);
     
-    // Helper to download a file
     const downloadBlob = (filename: string, content: string) => {
         const blob = new Blob([content], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -681,10 +672,8 @@ export const ThemeEditor: React.FC = () => {
 
     setTimeout(() => {
         try {
-            // CRITICAL OPTIMIZATION: Use strictly unified timestamp for all files
             const commonVersion = Date.now().toString();
 
-            // 1. DATA CORE (Small: Settings, Banner, Logo, Certs)
             const coreData = {
                 version: commonVersion,
                 theme: {
@@ -694,11 +683,10 @@ export const ThemeEditor: React.FC = () => {
                 }
             };
             
-            // 2. DATA ABOUT (Heavy: Factory, Lab, About Images)
             const aboutData = {
                 version: commonVersion,
                 theme: {
-                    factoryImages, // Keep legacy
+                    factoryImages,
                     productionImages,
                     rohsImages,
                     equipmentImages,
@@ -706,15 +694,12 @@ export const ThemeEditor: React.FC = () => {
                 }
             };
 
-            // 3. DATA PRODUCTS (Heavy: Products, Categories)
             const productsData = {
                 version: commonVersion,
                 products,
                 categories
             };
             
-            // Sequential Download with delays to allow browser to handle multiple files
-            // Increased delay to 1000ms to reduce likelihood of browser blocking
             const sizeCore = downloadBlob('data_core.json', JSON.stringify(coreData, null, 2));
             
             setTimeout(() => {
@@ -731,7 +716,6 @@ export const ThemeEditor: React.FC = () => {
                     setGenerationSuccess(true);
                     setIsGenerating(false);
                     
-                    // Alert user to check downloads
                     alert("Download complete.\n\nNOTE: If you only see 1 file, your browser blocked multiple downloads. Please allow popups or download permissions for this site.");
 
                 }, 1000);
@@ -745,7 +729,6 @@ export const ThemeEditor: React.FC = () => {
     }, 500);
   }
 
-  // ... (Clean Repo & Diags) ...
   const cleanRepoUrl = (url: string) => {
     let clean = url.trim();
     if (clean.endsWith('.git')) clean = clean.slice(0, -4);
@@ -756,7 +739,6 @@ export const ThemeEditor: React.FC = () => {
   const getGithubUploadUrl = () => {
       if (!repoUrl) return '';
       const clean = cleanRepoUrl(repoUrl);
-      // DIRECT LINK TO PUBLIC FOLDER UPLOAD
       return `${clean}/upload/main/public`;
   }
 
@@ -887,7 +869,8 @@ export const ThemeEditor: React.FC = () => {
         </div>
       )}
 
-      <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end">
+      {/* FIXED BUTTON POSITION: Raise to bottom-24 to avoid iOS bar */}
+      <div className="fixed bottom-24 right-6 z-[100] flex flex-col items-end">
         <button 
           onClick={() => setIsOpen(!isOpen)}
           className="bg-gray-900 text-white p-3 rounded-full shadow-lg hover:bg-gray-800 transition-all hover:rotate-90 duration-300"
@@ -897,14 +880,14 @@ export const ThemeEditor: React.FC = () => {
         </button>
 
         {isOpen && (
-          <div className="absolute bottom-16 right-0 w-96 bg-white rounded-xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-200">
+          <div className="absolute bottom-16 right-0 w-96 bg-white rounded-xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-200 h-[600px] max-h-[80vh]">
             
             <div className="bg-gray-50 border-b border-gray-200">
               <div className="flex justify-between items-center p-4 pb-2">
                   <h3 className="font-bold text-gray-900">Live Editor</h3>
                   <span className="text-[10px] uppercase tracking-wider bg-green-100 text-green-800 px-2 py-0.5 rounded-full font-bold">Split Mode</span>
               </div>
-              <div className="flex px-4 gap-4 overflow-x-auto">
+              <div className="flex px-4 gap-4 overflow-x-auto no-scrollbar">
                 <button onClick={() => setActiveTab('visual')} className={`pb-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${activeTab === 'visual' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Visuals</button>
                 <button onClick={() => setActiveTab('certs')} className={`pb-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${activeTab === 'certs' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Certs</button>
                 <button onClick={() => setActiveTab('about')} className={`pb-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${activeTab === 'about' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>About</button>
@@ -914,7 +897,7 @@ export const ThemeEditor: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-6 max-h-[500px] overflow-y-auto">
+            <div className="p-6 overflow-y-auto flex-1">
               
               {/* --- GITHUB TAB --- */}
               {activeTab === 'github' && (
@@ -1048,7 +1031,6 @@ export const ThemeEditor: React.FC = () => {
               {/* --- VISUAL TAB --- */}
               {activeTab === 'visual' && (
                 <div className="space-y-6">
-                  {/* ... existing visual tab content ... */}
                   <div>
                     <label className="text-sm font-medium text-gray-700 mb-2 flex items-center">Brand Logo</label>
                     <div className="flex items-center gap-4 mb-2">
@@ -1071,10 +1053,15 @@ export const ThemeEditor: React.FC = () => {
                       <Button variant="secondary" className="w-full !py-2 !text-xs flex items-center justify-center"><Upload className="w-3 h-3 mr-1" /> Change Banner</Button>
                     </div>
                   </div>
+                  <div className="border-t pt-4">
+                      <Button variant="outline" className="w-full !py-2 text-xs flex items-center justify-center" onClick={handleSmartOptimization}>
+                          <Zap className="w-3 h-3 mr-1 text-orange-500" /> Optimize All Images (Fix Vercel)
+                      </Button>
+                      <p className="text-[10px] text-gray-500 mt-1">Compresses all data to ensure it fits within Vercel's limits.</p>
+                  </div>
                 </div>
               )}
 
-              {/* ... existing Certs, About, Product, Manage tabs ... */}
               {/* --- CERTS TAB --- */}
               {activeTab === 'certs' && (
                   <div className="space-y-4">
@@ -1099,7 +1086,6 @@ export const ThemeEditor: React.FC = () => {
                                           </div>
                                       )}
                                       
-                                      {/* Strict Separation: China = Text Only, Others = File Only (Batch) */}
                                       {isChina ? (
                                           <div className="relative">
                                               <p className="text-[9px] text-gray-500 mb-1">Enter Certificate Name (Text Only):</p>
@@ -1142,7 +1128,7 @@ export const ThemeEditor: React.FC = () => {
                   </div>
               )}
               
-              {/* --- ABOUT TAB (UPDATED) --- */}
+              {/* --- ABOUT TAB --- */}
               {activeTab === 'about' && (
                   <div className="space-y-6">
                       <div className="bg-gray-50 p-3 rounded border">
@@ -1166,161 +1152,169 @@ export const ThemeEditor: React.FC = () => {
                                           <button onClick={() => removeRohsImage(idx)} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl hover:bg-red-600"><X className="w-3 h-3" /></button>
                                       </div>
                                   ))}
-                                  <div className="aspect-square border-2 border-dashed border-gray-300 rounded hover:border-gray-400 relative flex items-center justify-center bg-gray-50">
-                                      <Plus className="w-6 h-6 text-gray-300" />
+                                  <div className="aspect-square border-2 border-dashed border-gray-300 rounded hover:border-gray-400 flex items-center justify-center relative cursor-pointer bg-white">
+                                      <Plus className="w-5 h-5 text-gray-400" />
                                       <input type="file" accept="image/*" multiple className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleRohsUpload} disabled={isProcessing} />
                                   </div>
                               </div>
                           </div>
                       </div>
 
-                      <div>
-                        <label className="text-sm font-medium text-gray-700 mb-2 flex items-center"><Microscope className="w-4 h-4 mr-2" /> Lab Equipment Gallery</label>
-                        <div className="grid grid-cols-3 gap-2 mb-2">
-                              {equipmentImages.map((img, idx) => (
-                                  <div key={idx} className="relative aspect-square rounded overflow-hidden border">
-                                      <img src={img} className="w-full h-full object-cover" />
-                                      <button onClick={() => removeEquipmentImage(idx)} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl hover:bg-red-600"><X className="w-3 h-3" /></button>
+                      <div className="bg-gray-50 p-3 rounded border">
+                          <h4 className="font-bold text-xs text-gray-800 mb-3 uppercase flex items-center"><Microscope className="w-3 h-3 mr-1"/> Lab Equipment Gallery</h4>
+                          <div className="grid grid-cols-3 gap-2 mb-2">
+                                  {equipmentImages.map((img, idx) => (
+                                      <div key={idx} className="relative aspect-square rounded overflow-hidden border">
+                                          <img src={img} className="w-full h-full object-cover" />
+                                          <button onClick={() => removeEquipmentImage(idx)} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl hover:bg-red-600"><X className="w-3 h-3" /></button>
+                                      </div>
+                                  ))}
+                                  <div className="aspect-square border-2 border-dashed border-gray-300 rounded hover:border-gray-400 flex items-center justify-center relative cursor-pointer bg-white">
+                                      <Plus className="w-5 h-5 text-gray-400" />
+                                      <input type="file" accept="image/*" multiple className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleEquipmentUpload} disabled={isProcessing} />
                                   </div>
-                              ))}
-                              <div className="aspect-square border-2 border-dashed border-gray-300 rounded hover:border-gray-400 relative flex items-center justify-center bg-gray-50">
-                                  <Plus className="w-6 h-6 text-gray-300" />
-                                  <input type="file" accept="image/*" multiple className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleEquipmentUpload} disabled={isProcessing} />
-                              </div>
                           </div>
                       </div>
 
-                      <div className="border-t pt-4">
-                          <label className="text-sm font-medium text-gray-700 mb-2 flex items-center"><Award className="w-4 h-4 mr-2" /> Certifications Showcase (Image)</label>
-                        <div className="aspect-[4/1] w-full bg-gray-100 rounded border mb-2 flex items-center justify-center overflow-hidden">
-                            {aboutCertsImage ? <img src={aboutCertsImage} className="w-full h-full object-contain" /> : <span className="text-xs text-gray-400">No Image</span>}
-                        </div>
-                        <div className="relative">
-                            <input type="file" accept="image/*" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleAboutCertUpload} disabled={isProcessing} />
-                            <Button variant="secondary" className="w-full !py-1.5 !text-xs">{aboutCertsImage ? 'Replace Image' : 'Upload Image (PNG)'}</Button>
-                        </div>
+                      <div className="bg-gray-50 p-3 rounded border">
+                          <h4 className="font-bold text-xs text-gray-800 mb-3 uppercase flex items-center"><Award className="w-3 h-3 mr-1"/> Global Certs Banner</h4>
+                          <div className="aspect-[4/1] w-full bg-gray-200 rounded overflow-hidden relative border mb-1">
+                                  {aboutCertsImage ? <img src={aboutCertsImage} className="w-full h-full object-contain bg-white" /> : <div className="flex items-center justify-center h-full text-[10px] text-gray-500">No Image</div>}
+                                  <input type="file" accept="image/*" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleAboutCertUpload} disabled={isProcessing} />
+                          </div>
+                          <Button variant="white" className="w-full !text-[10px] !py-1">Change Cert Banner</Button>
                       </div>
                   </div>
               )}
 
               {/* --- PRODUCT TAB --- */}
               {activeTab === 'product' && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Product Name</label>
-                    <input type="text" className="w-full border border-gray-300 rounded p-2 text-sm" placeholder="e.g., Heavy Duty Cord" value={newProdName} onChange={e => setNewProdName(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
-                    <select className="w-full border border-gray-300 rounded p-2 text-sm" value={newProdCategory} onChange={handleCategoryChange}>
-                      {categories.map(c => (<option key={c.name} value={c.name}>{c.name}</option>))}
-                    </select>
-                  </div>
-                  {currentSubCategories.length > 0 && (
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Sub Category</label>
-                      <select className="w-full border border-gray-300 rounded p-2 text-sm" value={newProdSubCategory} onChange={e => setNewProdSubCategory(e.target.value)}>
-                        {currentSubCategories.map(sub => (<option key={sub} value={sub}>{sub}</option>))}
-                      </select>
-                    </div>
-                  )}
-                  <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Product Images</label>
-                      <div className="grid grid-cols-3 gap-2 mb-2">
-                          {newProdImages.map((img, idx) => (
-                              <div key={idx} className="relative aspect-square rounded overflow-hidden border">
-                                  <img src={img} className="w-full h-full object-cover" />
-                                  <button onClick={() => removeProductImage(idx)} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl"><X className="w-3 h-3" /></button>
+                <div className="space-y-6">
+                  {/* Add Product Form */}
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <h3 className="font-bold text-gray-900 mb-4 flex items-center"><Package className="w-4 h-4 mr-2" /> Add New Product</h3>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-xs font-medium text-gray-700 block mb-1">Product Name</label>
+                        <input 
+                          type="text" 
+                          className="w-full border rounded p-2 text-sm" 
+                          value={newProdName}
+                          onChange={(e) => setNewProdName(e.target.value)}
+                          placeholder="e.g. US Power Cord 3-Pin"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">Category</label>
+                          <select 
+                            className="w-full border rounded p-2 text-sm bg-white"
+                            value={newProdCategory}
+                            onChange={handleCategoryChange}
+                          >
+                            {categories.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                           <label className="text-xs font-medium text-gray-700 block mb-1">Sub-Category</label>
+                           <select 
+                            className="w-full border rounded p-2 text-sm bg-white"
+                            value={newProdSubCategory}
+                            onChange={(e) => setNewProdSubCategory(e.target.value)}
+                          >
+                             {currentSubCategories.map(sub => <option key={sub} value={sub}>{sub}</option>)}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-2">Images (First is Main)</label>
+                          <div className="grid grid-cols-4 gap-2 mb-2">
+                              {newProdImages.map((img, idx) => (
+                                  <div key={idx} className="relative aspect-square border rounded overflow-hidden">
+                                      <img src={img} className="w-full h-full object-contain" />
+                                      <button onClick={() => removeProductImage(idx)} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl hover:bg-red-600"><X className="w-3 h-3"/></button>
+                                  </div>
+                              ))}
+                              <div className="aspect-square border-2 border-dashed border-gray-300 rounded hover:border-gray-400 flex items-center justify-center relative cursor-pointer bg-gray-50">
+                                  <Plus className="w-5 h-5 text-gray-400" />
+                                  <input type="file" accept="image/*" multiple className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleProductImageUpload} disabled={isProcessing} />
                               </div>
-                          ))}
-                          <div className="aspect-square border-2 border-dashed border-gray-300 rounded hover:border-gray-400 relative flex items-center justify-center">
-                              <Plus className="w-6 h-6 text-gray-300" />
-                              <input type="file" accept="image/*" multiple className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleProductImageUpload} disabled={isProcessing} />
                           </div>
                       </div>
+
+                      <Button variant="primary" className="w-full !py-2 text-xs" onClick={handleAddProduct}>
+                        <Plus className="w-3 h-3 mr-1" /> Add to Catalog
+                      </Button>
+                    </div>
                   </div>
-                  <Button variant="primary" className="w-full mt-2" onClick={handleAddProduct} disabled={isProcessing}><Plus className="w-4 h-4 mr-1" /> Add to Catalog</Button>
+
+                  {/* List Products */}
+                  <div>
+                    <h3 className="font-bold text-gray-900 mb-2 text-sm">Product List ({products.length})</h3>
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                       {products.map(p => (
+                         <div key={p.id} className="flex justify-between items-center bg-gray-50 p-2 rounded border border-gray-200">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                               <div className="w-8 h-8 bg-white border rounded flex-shrink-0">
+                                  {p.images[0] && <img src={p.images[0]} className="w-full h-full object-contain"/>}
+                               </div>
+                               <div className="truncate">
+                                 <div className="text-xs font-bold text-gray-800 truncate max-w-[150px]">{p.nameEn}</div>
+                                 <div className="text-[10px] text-gray-500">{p.sku}</div>
+                               </div>
+                            </div>
+                            <button onClick={() => deleteProduct(p.id)} className="text-gray-400 hover:text-red-600 p-1"><Trash2 className="w-4 h-4"/></button>
+                         </div>
+                       ))}
+                    </div>
+                  </div>
                 </div>
               )}
 
               {/* --- MANAGE TAB --- */}
               {activeTab === 'manage' && (
-                <div className="space-y-6">
-                   <div className="bg-blue-50 border border-blue-100 rounded p-4">
-                    <h4 className="text-sm font-bold text-gray-900 mb-2 flex items-center">
-                          <Save className="w-4 h-4 mr-2 text-primary" /> Data Persistence
-                    </h4>
-                    <p className="text-[10px] text-gray-600 mb-3">
-                      Browser storage can be wiped. <strong>Save a backup file</strong> to your computer to prevent data loss.
-                    </p>
-                    <div className="flex gap-2">
-                        <Button variant="primary" className="!py-1.5 !px-3 !text-xs flex-1" onClick={handleExportData}>
-                            <Download className="w-3 h-3 mr-1" /> Export Backup
-                        </Button>
-                        <div className="relative flex-1">
-                            <input type="file" accept=".json,.ts" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onChange={handleImportData} disabled={isProcessing} />
-                            <Button variant="secondary" className="!py-1.5 !px-3 !text-xs w-full">
-                                <Upload className="w-3 h-3 mr-1" /> Import Backup
-                            </Button>
-                        </div>
-                    </div>
-                  </div>
+                  <div className="space-y-6">
+                      <div className="bg-gray-50 p-4 rounded border">
+                          <h4 className="font-bold text-sm mb-3">Categories</h4>
+                          <div className="flex gap-2 mb-3">
+                              <input 
+                                  type="text" 
+                                  placeholder="New Category Name" 
+                                  className="flex-1 border rounded p-1.5 text-xs"
+                                  value={newCatName}
+                                  onChange={(e) => setNewCatName(e.target.value)}
+                              />
+                              <Button variant="secondary" className="!py-1.5 !px-3 !text-xs" onClick={handleAddCategory}>Add</Button>
+                          </div>
+                          <div className="space-y-1">
+                              {categories.map(c => (
+                                  <div key={c.name} className="flex justify-between items-center text-xs bg-white border p-2 rounded">
+                                      <span>{c.name}</span>
+                                      <button onClick={() => deleteCategory(c.name)} className="text-red-400 hover:text-red-600"><X className="w-3 h-3"/></button>
+                                  </div>
+                              ))}
+                          </div>
+                      </div>
 
-                  {/* NEW OPTIMIZATION TOOL */}
-                  <div className="bg-green-50 border border-green-200 rounded p-4">
-                      <h4 className="text-sm font-bold text-gray-900 mb-2 flex items-center">
-                          <Zap className="w-4 h-4 mr-2 text-green-600" /> Smart Optimization
-                      </h4>
-                      <p className="text-[10px] text-gray-600 mb-3">
-                          If Vercel or GitHub rejects your files, use this to automatically compress all images (Products, Factory, etc) to a safe size for web deployment.
-                      </p>
-                      <Button 
-                          variant="white" 
-                          className="w-full !py-2 text-xs border-green-200 text-green-700 hover:bg-green-100"
-                          onClick={handleSmartOptimization}
-                          disabled={isProcessing}
-                      >
-                          <Zap className="w-3 h-3 mr-2" /> Optimize All Images & Save
-                      </Button>
+                      <div className="space-y-2">
+                          <Button variant="outline" className="w-full !py-2 text-xs flex justify-center" onClick={handleExportData}>
+                              <Download className="w-3 h-3 mr-2" /> Backup Data (JSON)
+                          </Button>
+                          <div className="relative">
+                              <input type="file" accept=".json" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleImportData} disabled={isProcessing} />
+                              <Button variant="outline" className="w-full !py-2 text-xs flex justify-center">
+                                  <Upload className="w-3 h-3 mr-2" /> Restore Backup
+                              </Button>
+                          </div>
+                          <Button variant="white" className="w-full !py-2 text-xs text-red-600 border-red-200 hover:bg-red-50 flex justify-center" onClick={handleResetAll}>
+                              <RotateCcw className="w-3 h-3 mr-2" /> Reset to Default
+                          </Button>
+                      </div>
                   </div>
-
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-900 mb-2 flex items-center"><List className="w-4 h-4 mr-2" /> Categories</h4>
-                    <div className="flex gap-2 mb-3">
-                        <input type="text" placeholder="New Category..." className="flex-1 border rounded p-1.5 text-xs" value={newCatName} onChange={e => setNewCatName(e.target.value)} />
-                        <Button variant="secondary" className="!py-1.5 !px-3 !text-xs" onClick={handleAddCategory}>Add</Button>
-                    </div>
-                    <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2">
-                        {categories.map(c => (
-                            <div key={c.name} className="flex justify-between items-center text-xs bg-gray-50 p-1.5 rounded">
-                                <span>{c.name}</span>
-                                <button onClick={() => deleteCategory(c.name)} className="text-red-500 hover:text-red-700"><Trash2 className="w-3 h-3" /></button>
-                            </div>
-                        ))}
-                    </div>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-900 mb-2 flex items-center"><Package className="w-4 h-4 mr-2" /> Products ({products.length})</h4>
-                    <div className="space-y-1 max-h-40 overflow-y-auto border rounded p-2">
-                        {products.map(p => (
-                            <div key={p.id} className="flex justify-between items-center text-xs bg-gray-50 p-1.5 rounded">
-                                <div className="flex items-center gap-2 overflow-hidden">
-                                    <img src={p.images[0]} className="w-6 h-6 rounded object-cover flex-shrink-0" />
-                                    <span className="truncate">{p.nameEn}</span>
-                                </div>
-                                <button onClick={() => deleteProduct(p.id)} className="text-red-500 hover:text-red-700 ml-2"><Trash2 className="w-3 h-3" /></button>
-                            </div>
-                        ))}
-                    </div>
-                  </div>
-                  <div className="pt-2 border-t">
-                    <Button variant="white" className="w-full !text-xs text-red-500 hover:bg-red-50" onClick={handleResetAll}>
-                      <RotateCcw className="w-3 h-3 mr-1" /> Reset to Initial Data
-                    </Button>
-                  </div>
-                </div>
               )}
-
             </div>
           </div>
         )}

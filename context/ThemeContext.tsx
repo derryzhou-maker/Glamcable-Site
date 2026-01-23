@@ -67,7 +67,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       const savedAboutCerts = await dbGet('glam_about_certs_image');
 
-      if (savedHero) setHeroImageState(savedHero);
+      if (savedHero !== undefined && savedHero !== null) setHeroImageState(savedHero);
       if (savedLogo) setLogoImageState(savedLogo);
       
       if (savedCerts) {
@@ -118,12 +118,24 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         let fetchedDataAbout: any = null;
         let fetchedVersion = '';
 
+        // Strict Anti-Caching Config for BOTH Desktop and Mobile
+        const fetchConfig: RequestInit = {
+             cache: 'no-store',
+             headers: {
+                 'Pragma': 'no-cache',
+                 'Cache-Control': 'no-cache, no-store, must-revalidate'
+             }
+        };
+
+        const ts = Date.now();
+        // Aggressive random number to bust ISP/Browser/PC caches
+        const rnd = Math.floor(Math.random() * 1000000); 
+
         try {
-            // OPTIMIZATION: Fetch separate files in parallel
-            // If data_about (large images) fails, we still want to load core settings
+            // OPTIMIZATION: Fetch separate files in parallel with random params
             const [coreRes, aboutRes] = await Promise.allSettled([
-                fetch('./data_core.json?t=' + Date.now(), { cache: 'no-cache' }),
-                fetch('./data_about.json?t=' + Date.now(), { cache: 'no-cache' })
+                fetch(`./data_core.json?t=${ts}&r=${rnd}`, fetchConfig),
+                fetch(`./data_about.json?t=${ts}&r=${rnd}`, fetchConfig)
             ]);
             
             // Process Core Data (Settings, Hero, Logo, Certs)
@@ -141,7 +153,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             } else {
                  console.warn("[ThemeContext] data_core.json missing or failed. Trying legacy data.json...");
                  // Try legacy data.json if core missing (backward compatibility)
-                 const legacyRes = await fetch('./data.json?t=' + Date.now(), { cache: 'no-cache' });
+                 const legacyRes = await fetch(`./data.json?t=${ts}&r=${rnd}`, fetchConfig);
                  if(legacyRes.ok) {
                      const text = await legacyRes.text();
                      try {
@@ -196,7 +208,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             const themeCore = fetchedDataCore?.theme || {};
             const themeAbout = fetchedDataAbout?.theme || {};
 
-            const safeHero = themeCore.heroImage || INITIAL_DATA.theme.heroImage;
+            const safeHero = themeCore.heroImage !== undefined ? themeCore.heroImage : INITIAL_DATA.theme.heroImage;
             const safeLogo = themeCore.logoImage || null;
             const safeCerts = themeCore.certImages || {}; 
             

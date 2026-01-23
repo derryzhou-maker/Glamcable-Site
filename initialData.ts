@@ -4,7 +4,7 @@ import { Product } from './types';
 export const INITIAL_DATA = {
   version: "1.3.1",
   theme: {
-    heroImage: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=2000",
+    heroImage: "",
     logoImage: null,
     certImages: {
         "china": [

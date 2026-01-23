@@ -63,6 +63,7 @@ export const Header: React.FC<HeaderProps> = ({ lang, setLang, activePage, navig
                  {lang === 'en' ? 'Xinruitai Electronics' : '欣瑞泰电子'}
                </span>
              </div>
+             {/* Slogan - Only visible on Large screens (Desktop) to save space on Tablet */}
              <div className="ml-4 hidden lg:block border-l border-gray-300 pl-4 h-10 flex items-center">
                <p className="text-xs text-gray-400 uppercase tracking-widest leading-snug w-72">
                  {lang === 'en' ? 'Global Professional Power Cord, Plug & Swivel Cord Solutions' : '全球专业电源线、插头及转尾线解决方案'}
@@ -70,8 +71,8 @@ export const Header: React.FC<HeaderProps> = ({ lang, setLang, activePage, navig
              </div>
           </div>
 
-          {/* Desktop Menu */}
-          <div className="hidden md:flex items-center space-x-8">
+          {/* Desktop Menu - Changed from md:flex to lg:flex to support iPad Portrait */}
+          <div className="hidden lg:flex items-center space-x-8">
             {NAV_ITEMS.map((item) => (
               <button
                 key={item.id}
@@ -86,45 +87,51 @@ export const Header: React.FC<HeaderProps> = ({ lang, setLang, activePage, navig
             <Button variant="primary" onClick={() => handleNav('contact')} className="!py-2 !px-4 !text-sm !bg-[#0066CC] hover:!bg-[#0055BB]">
               {TRANSLATIONS.getQuote[lang]}
             </Button>
-            <button onClick={toggleLang} className="md:hidden flex items-center text-gray-600">
+            <button onClick={toggleLang} className="hidden lg:flex items-center text-gray-600 hover:text-primary">
                {lang === 'en' ? 'CN' : 'EN'}
             </button>
           </div>
 
-          {/* Mobile Menu Button */}
-          <div className="md:hidden flex items-center">
-             <button onClick={toggleLang} className="mr-4 text-gray-600 font-medium">
+          {/* Mobile/Tablet Menu Button - Visible up to lg breakpoint */}
+          <div className="lg:hidden flex items-center">
+             <button onClick={toggleLang} className="mr-4 text-gray-600 font-medium border border-gray-200 px-2 py-1 rounded text-xs">
                {lang === 'en' ? 'CN' : 'EN'}
             </button>
             <button
               onClick={() => setIsOpen(!isOpen)}
-              className="text-gray-600 hover:text-primary focus:outline-none"
+              className="text-gray-600 hover:text-primary focus:outline-none p-2"
             >
-              {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+              {isOpen ? <X className="h-7 w-7" /> : <Menu className="h-7 w-7" />}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Mobile Menu */}
+      {/* Mobile/Tablet Dropdown Menu */}
       {isOpen && (
-        <div className="md:hidden bg-white border-t border-gray-100">
-          <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+        <div className="lg:hidden bg-white border-t border-gray-100 shadow-xl absolute w-full left-0 z-50">
+          <div className="px-4 pt-4 pb-6 space-y-2">
             {NAV_ITEMS.map((item) => (
               <button
                 key={item.id}
                 onClick={() => handleNav(item.id)}
-                className={`block w-full text-left px-3 py-2 rounded-md text-base font-medium ${
+                className={`block w-full text-left px-4 py-3 rounded-lg text-base font-medium transition-colors ${
                   activePage === item.id ? 'text-primary bg-blue-50' : 'text-gray-700 hover:text-primary hover:bg-gray-50'
                 }`}
               >
                 {lang === 'en' ? item.labelEn : item.labelZh}
               </button>
             ))}
-             <div className="mt-4 px-3">
-               <Button variant="primary" className="w-full" onClick={() => handleNav('contact')}>
+             <div className="mt-6 pt-4 border-t border-gray-100">
+               <Button variant="primary" className="w-full py-3 text-lg" onClick={() => handleNav('contact')}>
                  {TRANSLATIONS.getQuote[lang]}
                </Button>
+             </div>
+             
+             {/* Mobile Contact Info Quick View */}
+             <div className="mt-6 flex flex-col gap-2 text-xs text-gray-500 px-2">
+                 <div className="flex items-center"><Phone className="w-3 h-3 mr-2"/> {CONTACT_INFO.phoneSz}</div>
+                 <div className="flex items-center"><Mail className="w-3 h-3 mr-2"/> {CONTACT_INFO.emailSales}</div>
              </div>
           </div>
         </div>
