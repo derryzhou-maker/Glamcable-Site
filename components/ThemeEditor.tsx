@@ -45,6 +45,8 @@ export const ThemeEditor: React.FC = () => {
       isLoaded: productsLoaded 
   } = useProducts();
 
+  const isAppLoaded = themeLoaded && productsLoaded;
+
   // --- Product Form State ---
   const [newProdName, setNewProdName] = useState('');
   const [newProdCategory, setNewProdCategory] = useState('');
@@ -844,9 +846,8 @@ export const ThemeEditor: React.FC = () => {
       )
   }
 
-  if (!themeLoaded || !productsLoaded) {
-      return null;
-  }
+  // --- CHANGED: Always render, but button indicates loading ---
+  // Removed strict "return null" to allow editor to appear on mobile even if fetch fails.
 
   return (
     <>
@@ -873,14 +874,19 @@ export const ThemeEditor: React.FC = () => {
       <div className="fixed bottom-24 right-6 z-[100] flex flex-col items-end">
         <button 
           onClick={() => setIsOpen(!isOpen)}
-          className="bg-gray-900 text-white p-3 rounded-full shadow-lg hover:bg-gray-800 transition-all hover:rotate-90 duration-300"
+          className={`p-3 rounded-full shadow-lg transition-all hover:rotate-90 duration-300 flex items-center justify-center ${isAppLoaded ? 'bg-gray-900 text-white hover:bg-gray-800' : 'bg-amber-500 text-white animate-pulse'}`}
           title="Site Builder"
         >
-          {isOpen ? <X className="w-6 h-6" /> : <Settings className="w-6 h-6" />}
+          {!isAppLoaded ? (
+              <Loader2 className="w-6 h-6 animate-spin" />
+          ) : (
+              isOpen ? <X className="w-6 h-6" /> : <Settings className="w-6 h-6" />
+          )}
         </button>
 
         {isOpen && (
-          <div className="absolute bottom-16 right-0 w-96 bg-white rounded-xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-200 h-[600px] max-h-[80vh]">
+          // CHANGED: w-96 -> w-[calc(100vw-2rem)] sm:w-96 to fix mobile overflow
+          <div className="absolute bottom-16 right-0 w-[calc(100vw-2rem)] sm:w-96 bg-white rounded-xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-200 h-[600px] max-h-[80vh]">
             
             <div className="bg-gray-50 border-b border-gray-200">
               <div className="flex justify-between items-center p-4 pb-2">

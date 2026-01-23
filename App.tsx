@@ -19,7 +19,15 @@ function App() {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [inquirySku, setInquirySku] = useState<string>('');
 
+  // DOMAIN CHECK: Determine if we are on the live site
+  const [isProduction, setIsProduction] = useState(false);
+
   useEffect(() => {
+    // Determine production environment based on hostname
+    const hostname = window.location.hostname;
+    const isLive = hostname === 'glamcable.com' || hostname === 'www.glamcable.com';
+    setIsProduction(isLive);
+
     // Scroll to top on view change
     window.scrollTo(0, 0);
   }, [view, selectedProductId]);
@@ -86,8 +94,8 @@ function App() {
 
           <Footer lang={lang} navigate={navigateTo} />
           
-          {/* The Magic Floating Editor */}
-          <ThemeEditor />
+          {/* SECURITY: Only render the ThemeEditor if NOT on the live production domain */}
+          {!isProduction && <ThemeEditor />}
         </div>
       </ProductProvider>
     </ThemeProvider>

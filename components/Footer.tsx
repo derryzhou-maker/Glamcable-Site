@@ -3,6 +3,7 @@ import { MapPin, Phone, Mail, Linkedin, Youtube, RefreshCw, Trash2, Database } f
 import { Language } from '../types';
 import { TRANSLATIONS, CONTACT_INFO, NAV_ITEMS } from '../constants';
 import { useTheme } from '../context/ThemeContext';
+import { useProducts } from '../context/ProductContext';
 import { Logo } from './Logo';
 import { clearDatabase } from '../utils/db';
 
@@ -12,7 +13,8 @@ interface FooterProps {
 }
 
 export const Footer: React.FC<FooterProps> = ({ lang, navigate }) => {
-  const { logoImage, localVersion, remoteVersion } = useTheme();
+  const { logoImage, localVersion, remoteVersion, debugStatus: themeStatus } = useTheme();
+  const { debugStatus: productStatus } = useProducts();
   
   const handleForceUpdate = async () => {
     if (window.confirm("CRITICAL RESET: This will delete all local cache and force-download the latest content from the server.\n\nUse this if you don't see your latest updates.\n\nProceed?")) {
@@ -104,9 +106,9 @@ export const Footer: React.FC<FooterProps> = ({ lang, navigate }) => {
           <span>{TRANSLATIONS.copyright[lang]}</span>
           <div className="flex flex-col items-center gap-1 mt-2">
              <div className="flex items-center gap-3 text-[10px] text-gray-400 font-mono">
-                 <span title="Version of data currently displayed">Local: {localVersion?.slice(-6) || 'N/A'}</span>
+                 <span title="Version of data currently displayed">Ver: {remoteVersion?.slice(-6) || localVersion?.slice(-6) || 'N/A'}</span>
                  <span>|</span>
-                 <span title="Version of data on the server">Remote: {remoteVersion?.slice(-6) || 'Fetching...'}</span>
+                 <span title="Debug Status" className="text-blue-400">Status: {themeStatus} / {productStatus}</span>
              </div>
              
              <button 

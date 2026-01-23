@@ -30,6 +30,7 @@ interface ThemeContextType {
   isLoaded: boolean;
   remoteVersion: string | null;
   localVersion: string | null;
+  debugStatus: string; // New diagnostic field
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -53,9 +54,10 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   // Debug info
   const [remoteVersion, setRemoteVersion] = useState<string | null>(null);
   const [localVersion, setLocalVersion] = useState<string | null>(null);
+  const [debugStatus, setDebugStatus] = useState<string>('Init');
 
   const loadFromDB = async () => {
-      console.log("[ThemeContext] Loading from Local DB...");
+      // console.log("[ThemeContext] Loading from Local DB...");
       const savedHero = await dbGet('glam_hero_image');
       const savedLogo = await dbGet('glam_logo_image');
       const savedCerts = await dbGet('glam_cert_images');
@@ -103,104 +105,86 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       try {
         const forceLocalLoad = localStorage.getItem('glam_force_local_load') === 'true';
 
+        // 1. Always load DB first (Optimistic UI)
+        await loadFromDB();
+        const savedVersion = await dbGet('glam_data_version');
+        setLocalVersion(String(savedVersion || '0'));
+        
         if (forceLocalLoad) {
             console.log(">>> [ThemeContext] FORCE LOAD ACTIVE. Skipping Network.");
-            await loadFromDB();
+            setDebugStatus('Force Local');
             setIsLoaded(true);
             return;
         }
 
-        const savedVersion = await dbGet('glam_data_version');
-        const dbVersion = String(savedVersion || '0');
-        setLocalVersion(dbVersion);
-        
+        setDebugStatus('Fetching...');
+
+        // 2. Network Fetch - ABSOLUTE PATHS & NO-STORE CACHE
         let fetchedDataCore: any = null;
         let fetchedDataAbout: any = null;
-        let fetchedVersion = '';
-
-        // FIX FOR MOBILE: Removed complex headers. 
-        // Simple cache: 'no-store' + URL params is safest for mobile Safari/Chrome.
-        const fetchConfig: RequestInit = {
-             cache: 'no-store'
-        };
-
+        
+        const fetchConfig: RequestInit = { cache: 'no-store' };
         const ts = Date.now();
         const rnd = Math.floor(Math.random() * 1000000); 
 
         try {
-            // OPTIMIZATION: Fetch separate files in parallel with random params
             const [coreRes, aboutRes] = await Promise.allSettled([
-                fetch(`./data_core.json?t=${ts}&r=${rnd}`, fetchConfig),
-                fetch(`./data_about.json?t=${ts}&r=${rnd}`, fetchConfig)
+                fetch(`/data_core.json?t=${ts}&r=${rnd}`, fetchConfig),
+                fetch(`/data_about.json?t=${ts}&r=${rnd}`, fetchConfig)
             ]);
             
-            // Process Core Data (Settings, Hero, Logo, Certs)
             if (coreRes.status === 'fulfilled' && coreRes.value.ok) {
                  const text = await coreRes.value.text();
                  if (!text.startsWith('version https://git-lfs')) {
                     try {
                         fetchedDataCore = JSON.parse(text);
-                        // Core version dictates the main version
-                        fetchedVersion = String(fetchedDataCore?.version || '');
-                        setRemoteVersion(fetchedVersion);
-                        console.log(`[ThemeContext] Remote data_core.json found. Version: ${fetchedVersion}`);
-                    } catch (e) { console.warn("Failed parsing data_core.json", e); }
+                        setDebugStatus('Core OK');
+                    } catch (e) { 
+                        setDebugStatus('Core Parse Err');
+                    }
+                 } else {
+                     setDebugStatus('Core LFS Err');
                  }
             } else {
-                 console.warn("[ThemeContext] data_core.json missing or failed. Trying legacy data.json...");
-                 // Try legacy data.json if core missing (backward compatibility)
-                 const legacyRes = await fetch(`./data.json?t=${ts}&r=${rnd}`, fetchConfig);
+                 // Fallback to legacy
+                 const legacyRes = await fetch(`/data.json?t=${ts}&r=${rnd}`, fetchConfig);
                  if(legacyRes.ok) {
                      const text = await legacyRes.text();
                      try {
                          const json = JSON.parse(text);
                          fetchedDataCore = json;
-                         fetchedDataAbout = json; // Legacy has everything in one
-                         fetchedVersion = String(json.version || '');
-                         console.log("Using legacy data.json");
+                         fetchedDataAbout = json; 
+                         setDebugStatus('Legacy OK');
                      } catch(e) {}
+                 } else {
+                     setDebugStatus('Net Fail');
                  }
             }
 
-            // Process About Data (Factory images etc)
-            // It is OPTIONAL. If it fails (e.g. 404 or network timeout), we proceed with null.
             if (aboutRes.status === 'fulfilled' && aboutRes.value.ok) {
                 const text = await aboutRes.value.text();
                  if (!text.startsWith('version https://git-lfs')) {
                     try {
                         fetchedDataAbout = JSON.parse(text);
-                    } catch (e) { console.warn("Failed parsing data_about.json", e); }
+                    } catch (e) {}
                  }
             }
 
-        } catch (err) {
-            console.warn("[ThemeContext] Failed to fetch data files", err);
+        } catch (err: any) {
+            setDebugStatus(`Fetch Ex: ${err.message}`);
         }
 
-        const isLocalBackup = dbVersion.length > 10 && /^\d+$/.test(dbVersion);
-        const isRemoteBackup = fetchedVersion.length > 10 && /^\d+$/.test(fetchedVersion);
+        // 3. NETWORK WINS STRATEGY
+        // If we got valid data from server, we use it. We ignore version comparison logic
+        // because the user is experiencing issues where mobile (cached/empty) data persists.
+        // We assume the server data is always the "Truth".
         
-        let shouldOverwrite = false;
+        if (fetchedDataCore) {
+            const fetchedVersion = String(fetchedDataCore.version || '');
+            setRemoteVersion(fetchedVersion);
 
-        // Force overwrite if local is '0' (fresh device) or remote is newer
-        if (fetchedVersion) {
-             if (dbVersion === '0' || !dbVersion) {
-                 shouldOverwrite = true;
-             } else if (fetchedVersion !== dbVersion) {
-                 if (!isLocalBackup) {
-                     shouldOverwrite = true;
-                 } else if (isRemoteBackup && Number(fetchedVersion) > Number(dbVersion)) {
-                     shouldOverwrite = true;
-                     console.log(`[ThemeContext] Remote version (${fetchedVersion}) is newer than Local (${dbVersion}). Updating...`);
-                 }
-             }
-        }
-
-        if (shouldOverwrite) {
-            console.log(">>> Theme Update Triggered: Remote Version != Local Version. Overwriting.");
-            
-            // Merge Data from Core and About
-            const themeCore = fetchedDataCore?.theme || {};
+            // Merge Data
+            const themeCore = fetchedDataCore.theme || {};
             const themeAbout = fetchedDataAbout?.theme || {};
 
             const safeHero = themeCore.heroImage !== undefined ? themeCore.heroImage : INITIAL_DATA.theme.heroImage;
@@ -213,8 +197,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             const safeEquip = Array.isArray(themeAbout.equipmentImages) ? themeAbout.equipmentImages : INITIAL_DATA.theme.equipmentImages;
             const safeAbout = themeAbout.aboutCertsImage || null;
 
-            // CRITICAL FIX: Update State IMMEDIATELY, don't wait for DB
-            // This ensures the user sees the new data instantly, even if DB write is slow.
+            // UPDATE STATE IMMEDIATELY (Fixes the "Mobile Empty" bug)
             setHeroImageState(safeHero);
             setLogoImageState(safeLogo);
             setCertImagesState(safeCerts);
@@ -224,7 +207,8 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             setEquipmentImagesState(safeEquip);
             setAboutCertsImageState(safeAbout);
 
-            await dbSetMany([
+            // Background Save to DB for next time
+            dbSetMany([
                 { key: 'glam_data_version', value: fetchedVersion },
                 { key: 'glam_hero_image', value: safeHero },
                 { key: 'glam_logo_image', value: safeLogo },
@@ -234,10 +218,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                 { key: 'glam_rohs_images', value: safeRohs },
                 { key: 'glam_equip_images', value: safeEquip },
                 { key: 'glam_about_certs_image', value: safeAbout }
-            ]);
-
-        } else {
-            await loadFromDB();
+            ]).catch(e => console.error("BG Save Failed", e));
         }
 
       } catch (e) {
@@ -407,7 +388,8 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         equipmentImages, setEquipmentImages,
         aboutCertsImage, setAboutCertsImage,
         resetTheme, restoreTheme, isLoaded,
-        localVersion, remoteVersion
+        localVersion, remoteVersion,
+        debugStatus
     }}>
       {children}
     </ThemeContext.Provider>

@@ -18,6 +18,7 @@ interface ProductContextType {
   resetProducts: () => void;
   restoreProducts: (products: Product[], categories: Category[], version?: string) => Promise<void>;
   isLoaded: boolean;
+  debugStatus: string;
 }
 
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
@@ -28,6 +29,7 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [products, setProducts] = useState<Product[]>(INITIAL_DATA.products);
   const [categories, setCategories] = useState<Category[]>(INITIAL_DATA.categories);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [debugStatus, setDebugStatus] = useState("Init");
 
   // --- Helper: Data Sanitization (Prevents White Screens) ---
   const sanitizeProduct = (p: any): Product => {
@@ -73,14 +75,14 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // --- Core Loading Function ---
   const loadFromDB = async () => {
-      console.log("[ProductContext] Loading from Local DB...");
+      // console.log("[ProductContext] Loading from Local DB...");
       const savedCategories = await dbGet('glam_categories');
       if (savedCategories) setCategories(sanitizeCategories(savedCategories));
 
       const meta = await dbGet('glam_p_meta');
       
       if (meta && typeof meta.chunks === 'number') {
-          console.log(`[ProductContext] Loading ${meta.chunks} chunks...`);
+          // console.log(`[ProductContext] Loading ${meta.chunks} chunks...`);
           let allProducts: Product[] = [];
           
           for (let i = 0; i < meta.chunks; i++) {
@@ -104,123 +106,103 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
       try {
         const forceLocalLoad = localStorage.getItem('glam_force_local_load') === 'true';
 
+        // 1. Always Load DB first (Optimistic)
+        await loadFromDB();
+
         if (forceLocalLoad) {
             console.log(">>> [ProductContext] FORCE LOAD ACTIVE. Skipping Network.");
-            await loadFromDB();
+            setDebugStatus("Force Local");
             setIsLoaded(true);
             return;
         }
-
-        const savedVersion = await dbGet('glam_p_version');
-        const dbVersion = String(savedVersion || '0');
         
+        setDebugStatus("Fetching...");
+
         let fetchedData: any = null;
         let fetchedVersion = '';
 
-        // FIX FOR MOBILE: Removed complex headers.
-        const fetchConfig: RequestInit = {
-             cache: 'no-store'
-        };
-
+        // 2. Fetch Network - ABSOLUTE PATH
+        const fetchConfig: RequestInit = { cache: 'no-store' };
         const ts = Date.now();
         const rnd = Math.floor(Math.random() * 1000000); 
 
         try {
-            // OPTIMIZATION: Fetch specific products file with random string
-            const res = await fetch(`./data_products.json?t=${ts}&r=${rnd}`, fetchConfig); 
+            const res = await fetch(`/data_products.json?t=${ts}&r=${rnd}`, fetchConfig); 
             
             if (res.ok) {
                  const contentType = res.headers.get("content-type");
                  if (contentType && contentType.indexOf("application/json") === -1) {
-                     console.warn("[ProductContext] Server returned HTML instead of JSON.");
+                     setDebugStatus("HTML Err");
                      throw new Error("Invalid Content-Type");
                  }
                  
                 const text = await res.text();
                 if (text.startsWith('version https://git-lfs')) {
-                     console.error("CRITICAL: Git LFS Pointer detected.");
+                     setDebugStatus("LFS Err");
                      throw new Error("Git LFS Pointer detected");
                 }
 
                 try {
                     fetchedData = JSON.parse(text);
                     fetchedVersion = String(fetchedData?.version || '');
-                    console.log(`[ProductContext] Remote data_products.json found. Version: ${fetchedVersion} | Local: ${dbVersion}`);
+                    setDebugStatus("Prod OK");
                 } catch (jsonErr) {
+                    setDebugStatus("Parse Err");
                     fetchedData = null;
                 }
             } else {
-                 // Fallback to legacy data.json
-                 const legacyRes = await fetch(`./data.json?t=${ts}&r=${rnd}`, fetchConfig);
+                 // Fallback to legacy
+                 const legacyRes = await fetch(`/data.json?t=${ts}&r=${rnd}`, fetchConfig);
                  if(legacyRes.ok) {
                      const text = await legacyRes.text();
                      try {
                         const json = JSON.parse(text);
-                        // Legacy structure has products at root or inside content
                         fetchedData = json;
                         fetchedVersion = String(json.version || '');
-                        console.log("Using legacy data.json for products");
+                        setDebugStatus("Legacy OK");
                      } catch(e) {}
+                 } else {
+                     setDebugStatus(`Net Fail ${res.status}`);
                  }
             }
-        } catch (err) {
-            console.warn("[ProductContext] Network error fetching product data", err);
+        } catch (err: any) {
+            setDebugStatus(`Fetch Ex: ${err.message}`);
         }
 
-        const isLocalBackup = dbVersion.length > 10 && /^\d+$/.test(dbVersion);
-        const isRemoteBackup = fetchedVersion.length > 10 && /^\d+$/.test(fetchedVersion);
-
-        let shouldOverwrite = false;
-
-        // Force overwrite if local is '0' or remote is newer
-        if (fetchedData && fetchedVersion) {
-            if (dbVersion === '0' || !dbVersion) {
-                shouldOverwrite = true;
-            } else if (fetchedVersion !== dbVersion) {
-                 if (!isLocalBackup) {
-                     shouldOverwrite = true;
-                 } else if (isRemoteBackup && Number(fetchedVersion) > Number(dbVersion)) {
-                     shouldOverwrite = true;
-                     console.log(`[ProductContext] Remote version (${fetchedVersion}) is newer than Local (${dbVersion}). Updating...`);
-                 }
-            }
-        }
-
-        if (shouldOverwrite) {
-            console.log(`>>> Product Update Triggered: Remote (${fetchedVersion}) != Local (${dbVersion}). Overwriting local DB.`);
-            
-            // Handle both legacy (root.products) and new format
+        // 3. NETWORK WINS STRATEGY
+        // If we fetched valid data, we use it immediately to update the UI.
+        // We override local DB logic to prevent "stuck on old empty DB" issues.
+        if (fetchedData) {
             const rawProducts = Array.isArray(fetchedData.products) ? fetchedData.products : (fetchedData.content?.products || []);
             const rawCategories = Array.isArray(fetchedData.categories) ? fetchedData.categories : (fetchedData.content?.categories || []);
 
             const newProducts = rawProducts.map(sanitizeProduct);
             const newCategories = sanitizeCategories(rawCategories);
 
-            // CRITICAL FIX: Update State IMMEDIATELY, do not wait for DB delete/write
+            // UPDATE STATE IMMEDIATELY
             setProducts(newProducts);
             setCategories(newCategories);
 
-            await dbDelete('glam_products');
-            await dbDelete('glam_p_meta');
-            for(let i=0; i<50; i++) {
-                await dbDelete(`glam_p_chunk_${i}`);
-            }
+            // Background DB Sync
+            (async () => {
+                await dbDelete('glam_products'); // clear legacy
+                await dbDelete('glam_p_meta');
+                for(let i=0; i<50; i++) {
+                    await dbDelete(`glam_p_chunk_${i}`);
+                }
+                await dbSet('glam_p_version', fetchedVersion);
 
-            await dbSet('glam_p_version', fetchedVersion);
-
-            const totalChunks = Math.ceil(newProducts.length / CHUNK_SIZE);
-            const batchOps: {key: string, value: any}[] = [];
-            batchOps.push({ key: 'glam_categories', value: newCategories });
-            batchOps.push({ key: 'glam_p_meta', value: { chunks: totalChunks, totalItems: newProducts.length } });
-            
-            for (let i = 0; i < totalChunks; i++) {
-                const chunk = newProducts.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-                batchOps.push({ key: `glam_p_chunk_${i}`, value: chunk });
-            }
-            await dbSetMany(batchOps);
-
-        } else {
-            await loadFromDB();
+                const totalChunks = Math.ceil(newProducts.length / CHUNK_SIZE);
+                const batchOps: {key: string, value: any}[] = [];
+                batchOps.push({ key: 'glam_categories', value: newCategories });
+                batchOps.push({ key: 'glam_p_meta', value: { chunks: totalChunks, totalItems: newProducts.length } });
+                
+                for (let i = 0; i < totalChunks; i++) {
+                    const chunk = newProducts.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+                    batchOps.push({ key: `glam_p_chunk_${i}`, value: chunk });
+                }
+                await dbSetMany(batchOps);
+            })().catch(e => console.error("BG Product Save Failed", e));
         }
 
       } catch (e) {
@@ -335,7 +317,8 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
       deleteCategory, 
       resetProducts,
       restoreProducts,
-      isLoaded
+      isLoaded,
+      debugStatus
     }}>
       {children}
     </ProductContext.Provider>
