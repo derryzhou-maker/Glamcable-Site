@@ -984,7 +984,7 @@ export const ThemeEditor: React.FC = () => {
                                   {(fileSizes.core > 20 || fileSizes.about > 20 || fileSizes.products > 20) && (
                                      <div className="mt-1 text-[9px] text-red-600 font-bold flex items-center bg-red-50 p-1.5 rounded border border-red-200">
                                           <AlertTriangle className="w-3 h-3 mr-1" />
-                                          Warning: One file is still > 20MB.
+                                          Warning: One file is still &gt; 20MB.
                                      </div>
                                   )}
                               </div>
