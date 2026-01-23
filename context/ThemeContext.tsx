@@ -31,6 +31,7 @@ interface ThemeContextType {
   remoteVersion: string | null;
   localVersion: string | null;
   debugStatus: string; // New diagnostic field
+  debugErrorDetail: string; // Stores the snippet of invalid content
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -55,9 +56,9 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [remoteVersion, setRemoteVersion] = useState<string | null>(null);
   const [localVersion, setLocalVersion] = useState<string | null>(null);
   const [debugStatus, setDebugStatus] = useState<string>('Init');
+  const [debugErrorDetail, setDebugErrorDetail] = useState<string>('');
 
   const loadFromDB = async () => {
-      // console.log("[ThemeContext] Loading from Local DB...");
       const savedHero = await dbGet('glam_hero_image');
       const savedLogo = await dbGet('glam_logo_image');
       const savedCerts = await dbGet('glam_cert_images');
@@ -105,13 +106,12 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       try {
         const forceLocalLoad = localStorage.getItem('glam_force_local_load') === 'true';
 
-        // 1. Always load DB first (Optimistic UI)
+        // 1. Always load DB first
         await loadFromDB();
         const savedVersion = await dbGet('glam_data_version');
         setLocalVersion(String(savedVersion || '0'));
         
         if (forceLocalLoad) {
-            console.log(">>> [ThemeContext] FORCE LOAD ACTIVE. Skipping Network.");
             setDebugStatus('Force Local');
             setIsLoaded(true);
             return;
@@ -119,13 +119,16 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
         setDebugStatus('Fetching...');
 
-        // 2. Network Fetch - ABSOLUTE PATHS & NO-STORE CACHE
+        // 2. Network Fetch
         let fetchedDataCore: any = null;
         let fetchedDataAbout: any = null;
         
-        const fetchConfig: RequestInit = { cache: 'no-store' };
         const ts = Date.now();
         const rnd = Math.floor(Math.random() * 1000000); 
+        const fetchConfig: RequestInit = { 
+            cache: 'no-store',
+            headers: { 'Accept': 'application/json' }
+        };
 
         try {
             const [coreRes, aboutRes] = await Promise.allSettled([
@@ -133,20 +136,41 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                 fetch(`/data_about.json?t=${ts}&r=${rnd}`, fetchConfig)
             ]);
             
-            if (coreRes.status === 'fulfilled' && coreRes.value.ok) {
-                 const text = await coreRes.value.text();
-                 if (!text.startsWith('version https://git-lfs')) {
-                    try {
-                        fetchedDataCore = JSON.parse(text);
-                        setDebugStatus('Core OK');
-                    } catch (e) { 
-                        setDebugStatus('Core Parse Err');
-                    }
+            if (coreRes.status === 'fulfilled') {
+                 if (coreRes.value.ok) {
+                     const text = await coreRes.value.text();
+                     if (text.trim().startsWith('<')) {
+                         setDebugStatus('HTML Recvd');
+                         setDebugErrorDetail(`Got HTML instead of JSON: ${text.substring(0, 50)}...`);
+                     } else if (text.startsWith('version https://git-lfs')) {
+                         setDebugStatus('LFS Ptr Recvd');
+                         setDebugErrorDetail(text.substring(0, 50));
+                     } else {
+                        try {
+                            fetchedDataCore = JSON.parse(text);
+                            setDebugStatus('Core OK');
+                            setDebugErrorDetail('');
+                        } catch (e) { 
+                            setDebugStatus('JSON Parse Err');
+                            setDebugErrorDetail(`Invalid JSON start: ${text.substring(0, 50)}...`);
+                        }
+                     }
                  } else {
-                     setDebugStatus('Core LFS Err');
+                     setDebugStatus(`HTTP ${coreRes.value.status}`);
                  }
-            } else {
-                 // Fallback to legacy
+            }
+
+            if (aboutRes.status === 'fulfilled' && aboutRes.value.ok) {
+                const text = await aboutRes.value.text();
+                 if (!text.trim().startsWith('<') && !text.startsWith('version https://git-lfs')) {
+                    try {
+                        fetchedDataAbout = JSON.parse(text);
+                    } catch (e) {}
+                 }
+            }
+            
+            // Fallback Legacy
+            if (!fetchedDataCore) {
                  const legacyRes = await fetch(`/data.json?t=${ts}&r=${rnd}`, fetchConfig);
                  if(legacyRes.ok) {
                      const text = await legacyRes.text();
@@ -156,29 +180,15 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                          fetchedDataAbout = json; 
                          setDebugStatus('Legacy OK');
                      } catch(e) {}
-                 } else {
-                     setDebugStatus('Net Fail');
-                 }
-            }
-
-            if (aboutRes.status === 'fulfilled' && aboutRes.value.ok) {
-                const text = await aboutRes.value.text();
-                 if (!text.startsWith('version https://git-lfs')) {
-                    try {
-                        fetchedDataAbout = JSON.parse(text);
-                    } catch (e) {}
                  }
             }
 
         } catch (err: any) {
-            setDebugStatus(`Fetch Ex: ${err.message}`);
+            setDebugStatus('Net Err');
+            setDebugErrorDetail(err.message);
         }
 
-        // 3. NETWORK WINS STRATEGY
-        // If we got valid data from server, we use it. We ignore version comparison logic
-        // because the user is experiencing issues where mobile (cached/empty) data persists.
-        // We assume the server data is always the "Truth".
-        
+        // 3. Apply Data if Valid
         if (fetchedDataCore) {
             const fetchedVersion = String(fetchedDataCore.version || '');
             setRemoteVersion(fetchedVersion);
@@ -197,7 +207,6 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             const safeEquip = Array.isArray(themeAbout.equipmentImages) ? themeAbout.equipmentImages : INITIAL_DATA.theme.equipmentImages;
             const safeAbout = themeAbout.aboutCertsImage || null;
 
-            // UPDATE STATE IMMEDIATELY (Fixes the "Mobile Empty" bug)
             setHeroImageState(safeHero);
             setLogoImageState(safeLogo);
             setCertImagesState(safeCerts);
@@ -207,7 +216,6 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             setEquipmentImagesState(safeEquip);
             setAboutCertsImageState(safeAbout);
 
-            // Background Save to DB for next time
             dbSetMany([
                 { key: 'glam_data_version', value: fetchedVersion },
                 { key: 'glam_hero_image', value: safeHero },
@@ -389,7 +397,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         aboutCertsImage, setAboutCertsImage,
         resetTheme, restoreTheme, isLoaded,
         localVersion, remoteVersion,
-        debugStatus
+        debugStatus, debugErrorDetail
     }}>
       {children}
     </ThemeContext.Provider>

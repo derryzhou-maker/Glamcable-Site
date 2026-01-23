@@ -19,6 +19,7 @@ interface ProductContextType {
   restoreProducts: (products: Product[], categories: Category[], version?: string) => Promise<void>;
   isLoaded: boolean;
   debugStatus: string;
+  debugErrorDetail: string;
 }
 
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
@@ -30,8 +31,9 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [categories, setCategories] = useState<Category[]>(INITIAL_DATA.categories);
   const [isLoaded, setIsLoaded] = useState(false);
   const [debugStatus, setDebugStatus] = useState("Init");
+  const [debugErrorDetail, setDebugErrorDetail] = useState("");
 
-  // --- Helper: Data Sanitization (Prevents White Screens) ---
+  // --- Helper: Data Sanitization ---
   const sanitizeProduct = (p: any): Product => {
       if (!p || typeof p !== 'object') {
         return {
@@ -75,14 +77,12 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   // --- Core Loading Function ---
   const loadFromDB = async () => {
-      // console.log("[ProductContext] Loading from Local DB...");
       const savedCategories = await dbGet('glam_categories');
       if (savedCategories) setCategories(sanitizeCategories(savedCategories));
 
       const meta = await dbGet('glam_p_meta');
       
       if (meta && typeof meta.chunks === 'number') {
-          // console.log(`[ProductContext] Loading ${meta.chunks} chunks...`);
           let allProducts: Product[] = [];
           
           for (let i = 0; i < meta.chunks; i++) {
@@ -100,17 +100,16 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
       }
   };
 
-  // --- Load Logic with Chunk Support ---
+  // --- Load Logic ---
   useEffect(() => {
     const loadData = async () => {
       try {
         const forceLocalLoad = localStorage.getItem('glam_force_local_load') === 'true';
 
-        // 1. Always Load DB first (Optimistic)
+        // 1. Always Load DB first
         await loadFromDB();
 
         if (forceLocalLoad) {
-            console.log(">>> [ProductContext] FORCE LOAD ACTIVE. Skipping Network.");
             setDebugStatus("Force Local");
             setIsLoaded(true);
             return;
@@ -121,37 +120,45 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
         let fetchedData: any = null;
         let fetchedVersion = '';
 
-        // 2. Fetch Network - ABSOLUTE PATH
-        const fetchConfig: RequestInit = { cache: 'no-store' };
+        // 2. Fetch Network
         const ts = Date.now();
         const rnd = Math.floor(Math.random() * 1000000); 
+        const fetchConfig: RequestInit = { 
+            cache: 'no-store',
+            headers: { 'Accept': 'application/json' }
+        };
 
         try {
             const res = await fetch(`/data_products.json?t=${ts}&r=${rnd}`, fetchConfig); 
             
             if (res.ok) {
-                 const contentType = res.headers.get("content-type");
-                 if (contentType && contentType.indexOf("application/json") === -1) {
-                     setDebugStatus("HTML Err");
-                     throw new Error("Invalid Content-Type");
-                 }
-                 
                 const text = await res.text();
-                if (text.startsWith('version https://git-lfs')) {
-                     setDebugStatus("LFS Err");
-                     throw new Error("Git LFS Pointer detected");
-                }
-
-                try {
-                    fetchedData = JSON.parse(text);
-                    fetchedVersion = String(fetchedData?.version || '');
-                    setDebugStatus("Prod OK");
-                } catch (jsonErr) {
-                    setDebugStatus("Parse Err");
-                    fetchedData = null;
+                
+                // HTML Detection
+                if (text.trim().startsWith('<')) {
+                    setDebugStatus("HTML Recvd");
+                    setDebugErrorDetail(`Got HTML instead of JSON: ${text.substring(0, 50)}...`);
+                } 
+                // LFS Detection
+                else if (text.startsWith('version https://git-lfs')) {
+                     setDebugStatus("LFS Ptr Recvd");
+                     setDebugErrorDetail(text.substring(0, 50));
+                } 
+                // Valid JSON parsing
+                else {
+                    try {
+                        fetchedData = JSON.parse(text);
+                        fetchedVersion = String(fetchedData?.version || '');
+                        setDebugStatus("Prod OK");
+                        setDebugErrorDetail("");
+                    } catch (jsonErr) {
+                        setDebugStatus("JSON Parse Err");
+                        setDebugErrorDetail(`Invalid JSON start: ${text.substring(0, 50)}...`);
+                        fetchedData = null;
+                    }
                 }
             } else {
-                 // Fallback to legacy
+                 // Fallback Legacy
                  const legacyRes = await fetch(`/data.json?t=${ts}&r=${rnd}`, fetchConfig);
                  if(legacyRes.ok) {
                      const text = await legacyRes.text();
@@ -162,16 +169,15 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
                         setDebugStatus("Legacy OK");
                      } catch(e) {}
                  } else {
-                     setDebugStatus(`Net Fail ${res.status}`);
+                     setDebugStatus(`HTTP ${res.status}`);
                  }
             }
         } catch (err: any) {
-            setDebugStatus(`Fetch Ex: ${err.message}`);
+            setDebugStatus("Net Err");
+            setDebugErrorDetail(err.message);
         }
 
-        // 3. NETWORK WINS STRATEGY
-        // If we fetched valid data, we use it immediately to update the UI.
-        // We override local DB logic to prevent "stuck on old empty DB" issues.
+        // 3. Apply Data if Valid
         if (fetchedData) {
             const rawProducts = Array.isArray(fetchedData.products) ? fetchedData.products : (fetchedData.content?.products || []);
             const rawCategories = Array.isArray(fetchedData.categories) ? fetchedData.categories : (fetchedData.content?.categories || []);
@@ -179,13 +185,11 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
             const newProducts = rawProducts.map(sanitizeProduct);
             const newCategories = sanitizeCategories(rawCategories);
 
-            // UPDATE STATE IMMEDIATELY
             setProducts(newProducts);
             setCategories(newCategories);
 
-            // Background DB Sync
             (async () => {
-                await dbDelete('glam_products'); // clear legacy
+                await dbDelete('glam_products'); 
                 await dbDelete('glam_p_meta');
                 for(let i=0; i<50; i++) {
                     await dbDelete(`glam_p_chunk_${i}`);
@@ -214,7 +218,7 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
     loadData();
   }, []);
 
-  // --- Save Logic with Batching ---
+  // --- Save Logic ---
   useEffect(() => {
     if (!isLoaded) return;
 
@@ -318,7 +322,8 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
       resetProducts,
       restoreProducts,
       isLoaded,
-      debugStatus
+      debugStatus,
+      debugErrorDetail
     }}>
       {children}
     </ProductContext.Provider>

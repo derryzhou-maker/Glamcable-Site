@@ -13,22 +13,30 @@ interface FooterProps {
 }
 
 export const Footer: React.FC<FooterProps> = ({ lang, navigate }) => {
-  const { logoImage, localVersion, remoteVersion, debugStatus: themeStatus } = useTheme();
-  const { debugStatus: productStatus } = useProducts();
+  const { logoImage, localVersion, remoteVersion, debugStatus: themeStatus, debugErrorDetail: themeErr } = useTheme();
+  const { debugStatus: productStatus, debugErrorDetail: prodErr } = useProducts();
   
   const handleForceUpdate = async () => {
     if (window.confirm("CRITICAL RESET: This will delete all local cache and force-download the latest content from the server.\n\nUse this if you don't see your latest updates.\n\nProceed?")) {
         console.log("Nuclearing cache...");
+        
+        // Timeout to ensure reload happens even if DB clear gets stuck
+        setTimeout(() => {
+             window.location.reload();
+        }, 800);
+
         try {
             await clearDatabase();
             localStorage.clear();
-            alert("Cache cleared. The page will now reload.");
-            window.location.reload();
         } catch (e) {
-            alert("Failed to clear database. Please manually clear browser data.");
+            console.error(e);
         }
     }
   };
+
+  const showDebugInfo = () => {
+      alert(`DEBUG INFO:\n\nTheme Status: ${themeStatus}\nTheme Err: ${themeErr || 'None'}\n\nProduct Status: ${productStatus}\nProduct Err: ${prodErr || 'None'}`);
+  }
   
   return (
     <footer className="bg-neutral-100 pt-16 pb-8 border-t border-gray-200">
@@ -105,10 +113,16 @@ export const Footer: React.FC<FooterProps> = ({ lang, navigate }) => {
         <div className="mt-12 pt-8 border-t border-gray-200 text-center text-sm text-gray-500 flex flex-col items-center gap-2">
           <span>{TRANSLATIONS.copyright[lang]}</span>
           <div className="flex flex-col items-center gap-1 mt-2">
-             <div className="flex items-center gap-3 text-[10px] text-gray-400 font-mono">
+             <div 
+                className="flex items-center gap-3 text-[10px] text-gray-400 font-mono cursor-pointer hover:text-blue-500"
+                onClick={showDebugInfo}
+                title="Click to view detailed error info"
+             >
                  <span title="Version of data currently displayed">Ver: {remoteVersion?.slice(-6) || localVersion?.slice(-6) || 'N/A'}</span>
                  <span>|</span>
-                 <span title="Debug Status" className="text-blue-400">Status: {themeStatus} / {productStatus}</span>
+                 <span className={`font-bold ${themeStatus.includes('Err') ? 'text-red-500' : 'text-blue-400'}`}>
+                    Status: {themeStatus} / {productStatus}
+                 </span>
              </div>
              
              <button 
