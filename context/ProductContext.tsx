@@ -117,17 +117,12 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
         let fetchedData: any = null;
         let fetchedVersion = '';
 
-        // Strict Anti-Caching Fetch Config for BOTH Desktop and Mobile
+        // FIX FOR MOBILE: Removed complex headers.
         const fetchConfig: RequestInit = {
-             cache: 'no-store',
-             headers: {
-                 'Pragma': 'no-cache',
-                 'Cache-Control': 'no-cache, no-store, must-revalidate'
-             }
+             cache: 'no-store'
         };
 
         const ts = Date.now();
-        // Aggressive random number to bust ISP/Browser/PC caches
         const rnd = Math.floor(Math.random() * 1000000); 
 
         try {
@@ -177,13 +172,18 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
 
         let shouldOverwrite = false;
 
-        if (fetchedData && fetchedVersion && fetchedVersion !== dbVersion) {
-             if (!isLocalBackup) {
-                 shouldOverwrite = true;
-             } else if (isRemoteBackup && Number(fetchedVersion) > Number(dbVersion)) {
-                 shouldOverwrite = true;
-                 console.log(`[ProductContext] Remote version (${fetchedVersion}) is newer than Local (${dbVersion}). Updating...`);
-             }
+        // Force overwrite if local is '0' or remote is newer
+        if (fetchedData && fetchedVersion) {
+            if (dbVersion === '0' || !dbVersion) {
+                shouldOverwrite = true;
+            } else if (fetchedVersion !== dbVersion) {
+                 if (!isLocalBackup) {
+                     shouldOverwrite = true;
+                 } else if (isRemoteBackup && Number(fetchedVersion) > Number(dbVersion)) {
+                     shouldOverwrite = true;
+                     console.log(`[ProductContext] Remote version (${fetchedVersion}) is newer than Local (${dbVersion}). Updating...`);
+                 }
+            }
         }
 
         if (shouldOverwrite) {
@@ -196,14 +196,15 @@ export const ProductProvider: React.FC<{ children: ReactNode }> = ({ children })
             const newProducts = rawProducts.map(sanitizeProduct);
             const newCategories = sanitizeCategories(rawCategories);
 
+            // CRITICAL FIX: Update State IMMEDIATELY, do not wait for DB delete/write
+            setProducts(newProducts);
+            setCategories(newCategories);
+
             await dbDelete('glam_products');
             await dbDelete('glam_p_meta');
             for(let i=0; i<50; i++) {
                 await dbDelete(`glam_p_chunk_${i}`);
             }
-
-            setProducts(newProducts);
-            setCategories(newCategories);
 
             await dbSet('glam_p_version', fetchedVersion);
 

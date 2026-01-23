@@ -118,17 +118,13 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         let fetchedDataAbout: any = null;
         let fetchedVersion = '';
 
-        // Strict Anti-Caching Config for BOTH Desktop and Mobile
+        // FIX FOR MOBILE: Removed complex headers. 
+        // Simple cache: 'no-store' + URL params is safest for mobile Safari/Chrome.
         const fetchConfig: RequestInit = {
-             cache: 'no-store',
-             headers: {
-                 'Pragma': 'no-cache',
-                 'Cache-Control': 'no-cache, no-store, must-revalidate'
-             }
+             cache: 'no-store'
         };
 
         const ts = Date.now();
-        // Aggressive random number to bust ISP/Browser/PC caches
         const rnd = Math.floor(Math.random() * 1000000); 
 
         try {
@@ -175,8 +171,6 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                         fetchedDataAbout = JSON.parse(text);
                     } catch (e) { console.warn("Failed parsing data_about.json", e); }
                  }
-            } else {
-                 console.warn("[ThemeContext] data_about.json failed to load. Skipping large image assets.");
             }
 
         } catch (err) {
@@ -188,15 +182,17 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         
         let shouldOverwrite = false;
 
-        // Compare versions
-        if (fetchedVersion && fetchedVersion !== dbVersion) {
-             if (!isLocalBackup) {
+        // Force overwrite if local is '0' (fresh device) or remote is newer
+        if (fetchedVersion) {
+             if (dbVersion === '0' || !dbVersion) {
                  shouldOverwrite = true;
-             } else if (isRemoteBackup && Number(fetchedVersion) > Number(dbVersion)) {
-                 shouldOverwrite = true;
-                 console.log(`[ThemeContext] Remote version (${fetchedVersion}) is newer than Local (${dbVersion}). Updating...`);
-             } else {
-                 console.log(`[ThemeContext] Local version (${dbVersion}) is newer or equal to Remote (${fetchedVersion}). Keeping local.`);
+             } else if (fetchedVersion !== dbVersion) {
+                 if (!isLocalBackup) {
+                     shouldOverwrite = true;
+                 } else if (isRemoteBackup && Number(fetchedVersion) > Number(dbVersion)) {
+                     shouldOverwrite = true;
+                     console.log(`[ThemeContext] Remote version (${fetchedVersion}) is newer than Local (${dbVersion}). Updating...`);
+                 }
              }
         }
 
@@ -204,7 +200,6 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             console.log(">>> Theme Update Triggered: Remote Version != Local Version. Overwriting.");
             
             // Merge Data from Core and About
-            // Use fallback empty objects if fetches failed
             const themeCore = fetchedDataCore?.theme || {};
             const themeAbout = fetchedDataAbout?.theme || {};
 
@@ -218,6 +213,17 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             const safeEquip = Array.isArray(themeAbout.equipmentImages) ? themeAbout.equipmentImages : INITIAL_DATA.theme.equipmentImages;
             const safeAbout = themeAbout.aboutCertsImage || null;
 
+            // CRITICAL FIX: Update State IMMEDIATELY, don't wait for DB
+            // This ensures the user sees the new data instantly, even if DB write is slow.
+            setHeroImageState(safeHero);
+            setLogoImageState(safeLogo);
+            setCertImagesState(safeCerts);
+            setFactoryImagesState(safeFactory);
+            setProductionImagesState(safeProd);
+            setRohsImagesState(safeRohs);
+            setEquipmentImagesState(safeEquip);
+            setAboutCertsImageState(safeAbout);
+
             await dbSetMany([
                 { key: 'glam_data_version', value: fetchedVersion },
                 { key: 'glam_hero_image', value: safeHero },
@@ -230,14 +236,6 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                 { key: 'glam_about_certs_image', value: safeAbout }
             ]);
 
-            setHeroImageState(safeHero);
-            setLogoImageState(safeLogo);
-            setCertImagesState(safeCerts);
-            setFactoryImagesState(safeFactory);
-            setProductionImagesState(safeProd);
-            setRohsImagesState(safeRohs);
-            setEquipmentImagesState(safeEquip);
-            setAboutCertsImageState(safeAbout);
         } else {
             await loadFromDB();
         }
